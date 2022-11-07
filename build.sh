@@ -7,5 +7,5 @@ aclocal
 autoconf
 autoheader
 automake --add-missing
-CXXFLAGS="-O2 -std=gnu++11 -g -Wall -pedantic" ./configure "$@"
+CXXFLAGS="-std=c++14 -O2 -g -Wall -pedantic -fpermissive" ./configure "$@"
 make -j4
