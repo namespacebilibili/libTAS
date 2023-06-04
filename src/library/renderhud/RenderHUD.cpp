@@ -18,14 +18,14 @@
  */
 
 #include "RenderHUD.h"
-#ifdef LIBTAS_ENABLE_HUD
 
 #include "../logging.h"
 #include "../hook.h"
 #include <sstream>
-#include "../global.h" // shared_config
+#include "../global.h" // Global::shared_config
 #include "../ScreenCapture.h"
 #include "../../external/keysymdesc.h"
+#include "../GlobalState.h"
 
 namespace libtas {
 
@@ -100,13 +100,13 @@ void RenderHUD::resetOffsets()
 
 void RenderHUD::drawFrame(uint64_t framecount)
 {
-    Color fg_color = {255, 255, 255, 0};
-    Color bg_color = {0, 0, 0, 0};
+    Color fg_color = {255, 255, 255, 255};
+    Color bg_color = {0, 0, 0, 255};
     std::string framestr = std::to_string(framecount);
-    switch (shared_config.recording) {
+    switch (Global::shared_config.recording) {
     case SharedConfig::RECORDING_READ:
-        framestr.append("/").append(std::to_string(shared_config.movie_framecount));
-        if (framecount > shared_config.movie_framecount)
+        framestr.append("/").append(std::to_string(Global::shared_config.movie_framecount));
+        if (framecount > Global::shared_config.movie_framecount)
             framestr.append(" (Finished)");
         break;
     case SharedConfig::RECORDING_WRITE:
@@ -116,18 +116,18 @@ void RenderHUD::drawFrame(uint64_t framecount)
     }
 
     int x, y;
-    locationToCoords(shared_config.osd_frame_location, x, y);
+    locationToCoords(Global::shared_config.osd_frame_location, x, y);
     renderText(framestr.c_str(), fg_color, bg_color, x, y);
 }
 
 void RenderHUD::drawNonDrawFrame(uint64_t nondraw_framecount)
 {
-    Color red_color = {255, 0, 0, 0};
-    Color bg_color = {0, 0, 0, 0};
+    Color red_color = {255, 0, 0, 255};
+    Color bg_color = {0, 0, 0, 255};
     std::string nondraw_framestr = std::to_string(nondraw_framecount);
 
     int x, y;
-    locationToCoords(shared_config.osd_frame_location, x, y);
+    locationToCoords(Global::shared_config.osd_frame_location, x, y);
     renderText(nondraw_framestr.c_str(), red_color, bg_color, x, y);
 }
 
@@ -140,12 +140,12 @@ void RenderHUD::drawInputs(const AllInputs& ai, Color fg_color)
         oss << "[Restart] ";
     }
     for (int i=0; i<4; i++) {
-        if (ai.flags & (1 << (SingleInput::FLAG_CONTROLLER1_ADDED+i))) {
-            oss << "[J" << i << " added] ";
+        if (ai.flags & (1 << (SingleInput::FLAG_CONTROLLER1_ADDED_REMOVED+i))) {
+            oss << "[J" << i << " added/removed] ";
         }
-        if (ai.flags & (1 << (SingleInput::FLAG_CONTROLLER1_REMOVED+i))) {
-            oss << "[J" << i << " removed] ";
-        }
+    }
+    if (ai.flags & (1 << SingleInput::FLAG_FOCUS_UNFOCUS)) {
+        oss << "[Un/Focus] ";
     }
 
     /* Keyboard */
@@ -164,7 +164,7 @@ void RenderHUD::drawInputs(const AllInputs& ai, Color fg_color)
 #endif
 
     /* Mouse */
-    if (shared_config.mouse_support) {
+    if (Global::shared_config.mouse_support) {
         if (ai.pointer_x != -1) {
             oss << "[M " << ai.pointer_x << ":" << ai.pointer_y << ":";
             oss << ((ai.pointer_mode==SingleInput::POINTER_MODE_RELATIVE)?"R":"A");
@@ -183,7 +183,7 @@ void RenderHUD::drawInputs(const AllInputs& ai, Color fg_color)
     }
 
     /* Joystick */
-    for (int i=0; i<shared_config.nb_controllers; i++) {
+    for (int i=0; i<Global::shared_config.nb_controllers; i++) {
         for (int j=0; j<AllInputs::MAXAXES; j++) {
             if (ai.controller_axes[i][j] != 0)
                 oss << "[J" << i << " a" << j << ":" << ai.controller_axes[i][j] << "] ";
@@ -196,11 +196,11 @@ void RenderHUD::drawInputs(const AllInputs& ai, Color fg_color)
     }
 
     /* Render */
-    Color bg_color = {0, 0, 0, 0};
+    Color bg_color = {0, 0, 0, 255};
     std::string text = oss.str();
     if (!text.empty()) {
         int x, y;
-        locationToCoords(shared_config.osd_inputs_location, x, y);
+        locationToCoords(Global::shared_config.osd_inputs_location, x, y);
         renderText(text.c_str(), fg_color, bg_color, x, y);
     }
 }
@@ -216,8 +216,8 @@ void RenderHUD::insertMessage(const char* message)
 
 void RenderHUD::drawMessages()
 {
-    Color fg_color = {255, 255, 255, 0};
-    Color bg_color = {0, 0, 0, 0};
+    Color fg_color = {255, 255, 255, 255};
+    Color bg_color = {0, 0, 0, 255};
 
     TimeHolder message_timeout;
     message_timeout = {2, 0};
@@ -235,7 +235,7 @@ void RenderHUD::drawMessages()
         }
         else {
             int x, y;
-            locationToCoords(shared_config.osd_messages_location, x, y);
+            locationToCoords(Global::shared_config.osd_messages_location, x, y);
             renderText(iter->first.c_str(), fg_color, bg_color, x, y);
             iter++;
         }
@@ -254,12 +254,12 @@ void RenderHUD::resetWatches()
 
 void RenderHUD::drawWatches()
 {
-    Color fg_color = {255, 255, 255, 0};
-    Color bg_color = {0, 0, 0, 0};
+    Color fg_color = {255, 255, 255, 255};
+    Color bg_color = {0, 0, 0, 255};
 
     for (auto iter = watches.begin(); iter != watches.end(); iter++) {
         int x, y;
-        locationToCoords(shared_config.osd_ramwatches_location, x, y);
+        locationToCoords(Global::shared_config.osd_ramwatches_location, x, y);
         renderText(iter->c_str(), fg_color, bg_color, x, y);
     }
 }
@@ -281,6 +281,15 @@ void RenderHUD::drawLua()
     for (auto iter = lua_ellipses.begin(); iter != lua_ellipses.end(); iter++) {
         renderEllipse(iter->center_x, iter->center_y, iter->radius_x, iter->radius_y, iter->color);
     }
+}
+
+void RenderHUD::drawCrosshair(const AllInputs& ai)
+{
+    int size = 5;
+    renderRect(ai.pointer_x-1, ai.pointer_y-size-1, 3, 2*size+3, 0, {0, 0, 0, 255}, {0, 0, 0, 255});
+    renderRect(ai.pointer_x-size-1, ai.pointer_y-1, 2*size+3, 3, 0, {0, 0, 0, 255}, {0, 0, 0, 255});
+    renderLine(ai.pointer_x, ai.pointer_y-size, ai.pointer_x, ai.pointer_y+size, {255, 255, 255, 255});
+    renderLine(ai.pointer_x-size, ai.pointer_y, ai.pointer_x+size, ai.pointer_y, {255, 255, 255, 255});    
 }
 
 void RenderHUD::insertLuaText(int x, int y, std::string text, uint32_t fg_color, uint32_t bg_color)
@@ -371,26 +380,26 @@ void RenderHUD::resetLua()
 void RenderHUD::drawAll(uint64_t framecount, uint64_t nondraw_framecount, const AllInputs& ai, const AllInputs& preview_ai)
 {
     resetOffsets();
-    if (shared_config.osd & SharedConfig::OSD_FRAMECOUNT) {
+    if (Global::shared_config.osd & SharedConfig::OSD_FRAMECOUNT) {
         drawFrame(framecount);
         // hud.drawNonDrawFrame(nondraw_framecount);
     }
-    if (shared_config.osd & SharedConfig::OSD_INPUTS) {
-        drawInputs(ai, {255, 255, 255, 0});
-        drawInputs(preview_ai, {160, 160, 160, 0});
+    if (Global::shared_config.osd & SharedConfig::OSD_INPUTS) {
+        drawInputs(ai, {255, 255, 255, 255});
+        drawInputs(preview_ai, {160, 160, 160, 255});
     }
 
-    if (shared_config.osd & SharedConfig::OSD_MESSAGES)
+    if (Global::shared_config.osd & SharedConfig::OSD_MESSAGES)
         drawMessages();
 
-    if (shared_config.osd & SharedConfig::OSD_RAMWATCHES)
+    if (Global::shared_config.osd & SharedConfig::OSD_RAMWATCHES)
         drawWatches();
 
-    if (shared_config.osd & SharedConfig::OSD_LUA)
+    if (Global::shared_config.osd & SharedConfig::OSD_LUA)
         drawLua();
 
+    if (Global::shared_config.osd & SharedConfig::OSD_CROSSHAIR)
+        drawCrosshair(ai);
 }
 
 }
-
-#endif

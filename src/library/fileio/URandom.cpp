@@ -23,6 +23,9 @@
 #include "../logging.h"
 #include <fcntl.h>
 #include <unistd.h> // getpid()
+#include <signal.h>
+#include "../global.h"
+#include "../GlobalState.h"
 
 namespace libtas {
 
@@ -35,7 +38,7 @@ static void urandom_handler(int signum)
 {
     debuglogstdio(LCF_FILEIO | LCF_RANDOM, "Filling urandom fd");
     if (!prng_state)
-        prng_state = shared_config.initial_time_sec;
+        prng_state = Global::shared_config.initial_time_sec;
     
     int err = 0;
     do {

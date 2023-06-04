@@ -26,6 +26,8 @@
 #include "../fileio/FileHandleList.h"
 #include "../../shared/AllInputs.h"
 #include <unistd.h> /* write */
+#include "../global.h"
+#include "../GlobalState.h"
 
 namespace libtas {
 
@@ -40,7 +42,7 @@ int is_jsdev(const char* source)
     if (ret != 1)
         return -1;
 
-    if (jsnum < 0 || jsnum >= shared_config.nb_controllers) {
+    if (jsnum < 0 || jsnum >= Global::shared_config.nb_controllers) {
         return 0;
     }
 
@@ -55,7 +57,7 @@ int open_jsdev(const char* source, int flags)
     MYASSERT(ret == 1)
 
     /* Return -1 and set errno if we don't support this js number */
-    if (jsnum < 0 || jsnum >= shared_config.nb_controllers) {
+    if (jsnum < 0 || jsnum >= Global::shared_config.nb_controllers) {
         errno = ENOENT;
         return -1;
     }
@@ -64,8 +66,8 @@ int open_jsdev(const char* source, int flags)
 
     if (jsdevfds[jsnum].second++ == 0) {
         /* Register that we use JSDEV for joystick inputs */
-        game_info.joystick |= GameInfo::JSDEV;
-        game_info.tosend = true;
+        Global::game_info.joystick |= GameInfo::JSDEV;
+        Global::game_info.tosend = true;
 
         /* Create an unnamed pipe */
         jsdevfds[jsnum].first = FileHandleList::createPipe(flags);

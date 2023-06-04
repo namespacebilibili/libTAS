@@ -20,11 +20,12 @@
 #include "frame.h"
 #include "../shared/AllInputs.h"
 #include "../shared/messages.h"
-#include "global.h" // shared_config
+#include "global.h" // Global::shared_config
 #include "inputs/inputs.h" // AllInputs ai object
 #include "inputs/inputevents.h"
 #include "../shared/sockethelpers.h"
 #include "logging.h"
+#include "GlobalState.h"
 #include "DeterministicTimer.h"
 #include "encoding/AVEncoder.h"
 #include "sdl/sdlwindows.h"
@@ -43,6 +44,7 @@
 #include "audio/AudioContext.h"
 #include "hook.h"
 #include "GameHacks.h"
+#include "PerfTimer.h"
 
 #ifdef __unix__
 #include "xlib/xevents.h"
@@ -66,11 +68,7 @@ static uint64_t nondraw_framecount = 0;
 /* Did we do at least one savestate? */
 static bool didASavestate = false;
 
-#ifdef LIBTAS_ENABLE_HUD
 static void receive_messages(std::function<void()> draw, RenderHUD& hud);
-#else
-static void receive_messages(std::function<void()> draw);
-#endif
 
 /* Compute real and logical fps */
 static void computeFPS(float& fps, float& lfps)
@@ -92,7 +90,7 @@ static void computeFPS(float& fps, float& lfps)
     static int compute_counter = 0;
 
     /* Immedialty reset fps computing frequency if not fast-forwarding */
-    if (!shared_config.fastforward) {
+    if (!Global::shared_config.fastforward) {
         fps_refresh_freq = 10;
     }
 
@@ -129,7 +127,7 @@ static void computeFPS(float& fps, float& lfps)
             lfps = static_cast<float>(deltaFrames) * 1000000000.0f / (deltaTicks.tv_sec * 1000000000.0f + deltaTicks.tv_nsec);
 
             /* Update fps computing frequency if fast-forwarding */
-            if (shared_config.fastforward) {
+            if (Global::shared_config.fastforward) {
                 fps_refresh_freq = static_cast<int>(fps) / 4;
             }
         }
@@ -142,26 +140,30 @@ static bool skipDraw(float fps)
     static unsigned int skip_counter = 0;
 
     /* Don't skip if not fastforwarding */
-    if (!shared_config.fastforward)
+    if (!Global::shared_config.fastforward)
         return false;
 
     /* Don't skip if frame-advancing */
-    if (!shared_config.running)
+    if (!Global::shared_config.running)
         return false;
 
     /* Never skip a draw when encoding. */
-    if (shared_config.av_dumping)
+    if (Global::shared_config.av_dumping)
         return false;
 
     /* Apply the fast-forward render setting */
-    switch(shared_config.fastforward_render) {
+    switch(Global::shared_config.fastforward_render) {
         case SharedConfig::FF_RENDER_NO:
             return true;
         case SharedConfig::FF_RENDER_ALL:
             return false;
         default:
-            break;            
+            break;
     }
+
+    /* Skipping frames in Vulkan currently results in softlock. */
+    if (Global::game_info.video & GameInfo::VULKAN)
+        return false;
 
     unsigned int skip_freq = 1;
 
@@ -211,12 +213,11 @@ static void sendFrameCountTime()
     sendData(&ticks_val, sizeof(uint64_t));
 }
 
-#ifdef LIBTAS_ENABLE_HUD
 void frameBoundary(std::function<void()> draw, RenderHUD& hud)
-#else
-void frameBoundary(std::function<void()> draw)
-#endif
 {
+    perfTimer.switchTimer(PerfTimer::FrameTimer);
+
+
     static float fps, lfps = 0;
 
     ThreadManager::setCheckpointThread();
@@ -227,23 +228,26 @@ void frameBoundary(std::function<void()> draw)
 
     /* Wait for events to be processed by the game */
 #ifdef __unix__
-    if (shared_config.async_events & SharedConfig::ASYNC_XEVENTS_END)
+    if (Global::shared_config.async_events & SharedConfig::ASYNC_XEVENTS_END)
         xlibEventQueueList.waitForEmpty();
 #endif
-    if (shared_config.async_events & SharedConfig::ASYNC_SDLEVENTS_END)
+    if (Global::shared_config.async_events & SharedConfig::ASYNC_SDLEVENTS_END)
         sdlEventQueue.waitForEmpty();
 
-    if ((shared_config.game_specific_sync & SharedConfig::GC_SYNC_WITNESS) && (framecount > 11) && (draw)) {
+    if ((Global::shared_config.game_specific_sync & SharedConfig::GC_SYNC_WITNESS) && (framecount > 11) && (draw)) {
         ThreadSync::detWait();
     }
 
-    if (shared_config.game_specific_sync & SharedConfig::GC_SYNC_CELESTE) {
+    if (Global::shared_config.game_specific_sync & SharedConfig::GC_SYNC_CELESTE) {
         ThreadSync::detWait();
     }
     
+    perfTimer.switchTimer(PerfTimer::RenderTimer);
+
     if (GameHacks::isUnity()) {
         ThreadSync::detWait();        
     }
+    perfTimer.switchTimer(PerfTimer::FrameTimer);
 
     /* Update the deterministic timer, sleep if necessary */
     TimeHolder timeIncrement = detTimer.enterFrameBoundary();
@@ -254,19 +258,19 @@ void frameBoundary(std::function<void()> draw)
     }
 
     /* If the game is exiting, dont process the frame boundary, just draw and exit */
-    if (is_exiting) {
+    if (Global::is_exiting) {
         detTimer.flushDelay();
 
         if (draw)
             NATIVECALL(draw());
 
         /* Still push native events so that the game can exit properly */
-        if ((game_info.video & GameInfo::SDL1) || (game_info.video & GameInfo::SDL2)) {
+        if ((Global::game_info.video & GameInfo::SDL1) || (Global::game_info.video & GameInfo::SDL2)) {
             pushNativeSDLEvents();
         }
 
 #ifdef __unix__
-        if (!(shared_config.debug_state & SharedConfig::DEBUG_NATIVE_EVENTS)) {
+        if (!(Global::shared_config.debug_state & SharedConfig::DEBUG_NATIVE_EVENTS)) {
             pushNativeXlibEvents();
             pushNativeXcbEvents();
         }
@@ -297,10 +301,10 @@ void frameBoundary(std::function<void()> draw)
     sendFrameCountTime();
 
     /* Send GameInfo struct if needed */
-    if (game_info.tosend) {
+    if (Global::game_info.tosend) {
         sendMessage(MSGB_GAMEINFO);
-        sendData(&game_info, sizeof(game_info));
-        game_info.tosend = false;
+        sendData(&Global::game_info, sizeof(Global::game_info));
+        Global::game_info.tosend = false;
     }
 
     /* Send fps and lfps values */
@@ -310,9 +314,9 @@ void frameBoundary(std::function<void()> draw)
 
     /* Notify the program that threads have changed, so that it can show it
      * and trigger a backtrack savestate */
-    if (threadListChanged) {
+    if (ThreadManager::hasThreadListChanged()) {
         sendMessage(MSGB_INVALIDATE_SAVESTATES);
-        threadListChanged = false;
+        ThreadManager::resetThreadListChanged();
     }
 
     /* Send message if non-draw frame */
@@ -324,10 +328,8 @@ void frameBoundary(std::function<void()> draw)
     sendMessage(MSGB_START_FRAMEBOUNDARY);
 
     /* Reset ramwatches and lua drawings */
-#ifdef LIBTAS_ENABLE_HUD
     RenderHUD::resetWatches();
     RenderHUD::resetLua();
-#endif
 
     /* Receive messages from the program */
     int message = receiveMessage();
@@ -338,9 +340,7 @@ void frameBoundary(std::function<void()> draw)
         {
             /* Get ramwatch from the program */
             std::string ramwatch = receiveString();
-#ifdef LIBTAS_ENABLE_HUD
             RenderHUD::insertWatch(ramwatch);
-#endif
             break;
         }
         case MSGN_LUA_RESOLUTION:
@@ -361,9 +361,7 @@ void frameBoundary(std::function<void()> draw)
             uint32_t fg, bg;
             receiveData(&fg, sizeof(uint32_t));
             receiveData(&bg, sizeof(uint32_t));
-#ifdef LIBTAS_ENABLE_HUD
             RenderHUD::insertLuaText(x, y, text, fg, bg);
-#endif
             break;
         }
         case MSGN_LUA_PIXEL:
@@ -373,9 +371,7 @@ void frameBoundary(std::function<void()> draw)
             receiveData(&y, sizeof(int));
             uint32_t color;
             receiveData(&color, sizeof(uint32_t));
-#ifdef LIBTAS_ENABLE_HUD
             RenderHUD::insertLuaPixel(x, y, color);
-#endif
             break;
         }
         case MSGN_LUA_RECT:
@@ -389,9 +385,7 @@ void frameBoundary(std::function<void()> draw)
             uint32_t outline, fill;
             receiveData(&outline, sizeof(uint32_t));
             receiveData(&fill, sizeof(uint32_t));
-#ifdef LIBTAS_ENABLE_HUD
             RenderHUD::insertLuaRect(x, y, w, h, thickness, outline, fill);
-#endif
             break;
         }
         case MSGN_LUA_LINE:
@@ -403,9 +397,7 @@ void frameBoundary(std::function<void()> draw)
             receiveData(&y1, sizeof(int));
             uint32_t color;
             receiveData(&color, sizeof(uint32_t));
-#ifdef LIBTAS_ENABLE_HUD
             RenderHUD::insertLuaLine(x0, y0, x1, y1, color);
-#endif
             break;
         }
         case MSGN_LUA_ELLIPSE:
@@ -417,9 +409,7 @@ void frameBoundary(std::function<void()> draw)
             receiveData(&radius_y, sizeof(int));
             uint32_t color;
             receiveData(&color, sizeof(uint32_t));
-#ifdef LIBTAS_ENABLE_HUD
             RenderHUD::insertLuaEllipse(center_x, center_y, radius_x, radius_y, color);
-#endif
             break;
         }
         }
@@ -431,21 +421,19 @@ void frameBoundary(std::function<void()> draw)
         nondraw_framecount++;
 
     /* Update window title */
-    if (!skipping_draw)
+    if (!Global::skipping_draw)
         WindowTitle::update(fps, lfps);
 
     /* If we want HUD to appear in encodes, we need to draw it before saving
      * the window surface/texture/etc. This has the small drawback that we
      * won't be able to remove HUD messages during that frame. */
-#ifdef LIBTAS_ENABLE_HUD
-    if (!skipping_draw && draw && shared_config.osd_encode) {
+    if (!Global::skipping_draw && draw && Global::shared_config.osd_encode) {
         AllInputs preview_ai;
         preview_ai.emptyInputs();
         hud.drawAll(framecount, nondraw_framecount, ai, preview_ai);
     }
-#endif
 
-    if (!skipping_draw) {
+    if (!Global::skipping_draw) {
         if (draw) {
             ScreenCapture::copyScreenToSurface();
         }
@@ -453,7 +441,7 @@ void frameBoundary(std::function<void()> draw)
 
     /* Audio mixing is done above, so encode must be called after */
     /* Dumping audio and video */
-    if (shared_config.av_dumping) {
+    if (Global::shared_config.av_dumping) {
 
         /* First, create the AVEncoder is needed */
         if (!avencoder) {
@@ -474,26 +462,22 @@ void frameBoundary(std::function<void()> draw)
         }
     }
 
-#ifdef LIBTAS_ENABLE_HUD
-    if (!skipping_draw && draw && !shared_config.osd_encode) {
+    if (!Global::skipping_draw && draw && !Global::shared_config.osd_encode) {
         AllInputs preview_ai;
         preview_ai.emptyInputs();
         hud.drawAll(framecount, nondraw_framecount, ai, preview_ai);
     }
-#endif
 
     /* Actual draw command */
-    if (!skipping_draw && draw) {
+    if (!Global::skipping_draw && draw) {
         GlobalNoLog gnl;
+        perfTimer.switchTimer(PerfTimer::RenderTimer);
         NATIVECALL(draw());
+        perfTimer.switchTimer(PerfTimer::FrameTimer);
     }
 
     /* Receive messages from the program */
-#ifdef LIBTAS_ENABLE_HUD
-        receive_messages(draw, hud);
-#else
-        receive_messages(draw);
-#endif
+    receive_messages(draw, hud);
 
     /* No more socket messages here, unlocking the socket. */
     unlockSocket();
@@ -505,7 +489,7 @@ void frameBoundary(std::function<void()> draw)
      * It is also the case for double buffer draw methods when the game does
      * not clean the back buffer.
      */
-    if (!skipping_draw && draw) {
+    if (!Global::skipping_draw && draw) {
         ScreenCapture::restoreScreenState();
     }
 
@@ -515,13 +499,13 @@ void frameBoundary(std::function<void()> draw)
      * the event system. For now, we push some native events that the game might
      * expect to prevent some softlocks or other unexpected behaviors.
      */
-    if ((game_info.video & GameInfo::SDL1) || (game_info.video & GameInfo::SDL2)) {
+    if ((Global::game_info.video & GameInfo::SDL1) || (Global::game_info.video & GameInfo::SDL2)) {
         /* Push native SDL events into our emulated event queue */
         pushNativeSDLEvents();
     }
 
 #ifdef __unix__
-    if (!(shared_config.debug_state & SharedConfig::DEBUG_NATIVE_EVENTS)) {
+    if (!(Global::shared_config.debug_state & SharedConfig::DEBUG_NATIVE_EVENTS)) {
         pushNativeXlibEvents();
         pushNativeXcbEvents();
     }
@@ -534,35 +518,30 @@ void frameBoundary(std::function<void()> draw)
 
 #ifdef __unix__
     /* Reset the empty state of each xevent queue, for async event handling */
-    if (shared_config.async_events & (SharedConfig::ASYNC_XEVENTS_BEG | SharedConfig::ASYNC_XEVENTS_END)) {
+    if (Global::shared_config.async_events & (SharedConfig::ASYNC_XEVENTS_BEG | SharedConfig::ASYNC_XEVENTS_END)) {
         xlibEventQueueList.lock();
         xlibEventQueueList.resetEmpty();
     }
 #endif
 
     /* Reset the empty state of the SDL queue, for async event handling */
-    if (shared_config.async_events & (SharedConfig::ASYNC_SDLEVENTS_BEG | SharedConfig::ASYNC_SDLEVENTS_END)) {
+    if (Global::shared_config.async_events & (SharedConfig::ASYNC_SDLEVENTS_BEG | SharedConfig::ASYNC_SDLEVENTS_END)) {
         sdlEventQueue.mutex.lock();
         sdlEventQueue.resetEmpty();
     }
 
     /* Push generated events. This must be done after getting the new inputs. */
-    if (!(shared_config.debug_state & SharedConfig::DEBUG_NATIVE_EVENTS)) {
-        generateKeyUpEvents();
-        generateKeyDownEvents();
-        generateControllerAdded();
-        generateControllerEvents();
-        generateMouseMotionEvents();
-        generateMouseButtonEvents();
+    if (!(Global::shared_config.debug_state & SharedConfig::DEBUG_NATIVE_EVENTS)) {
+        generateInputEvents();
     }
 
 #ifdef __unix__
-    if (shared_config.async_events & (SharedConfig::ASYNC_XEVENTS_BEG | SharedConfig::ASYNC_XEVENTS_END)) {
+    if (Global::shared_config.async_events & (SharedConfig::ASYNC_XEVENTS_BEG | SharedConfig::ASYNC_XEVENTS_END)) {
         xlibEventQueueList.unlock();
     }
 #endif
 
-    if (shared_config.async_events & (SharedConfig::ASYNC_SDLEVENTS_BEG | SharedConfig::ASYNC_SDLEVENTS_END)) {
+    if (Global::shared_config.async_events & (SharedConfig::ASYNC_SDLEVENTS_BEG | SharedConfig::ASYNC_SDLEVENTS_END)) {
         sdlEventQueue.mutex.unlock();
     }
 
@@ -571,11 +550,11 @@ void frameBoundary(std::function<void()> draw)
 
     /* Wait for events to be processed by the game */
 #ifdef __unix__
-    if (shared_config.async_events & SharedConfig::ASYNC_XEVENTS_BEG)
+    if (Global::shared_config.async_events & SharedConfig::ASYNC_XEVENTS_BEG)
         xlibEventQueueList.waitForEmpty();
 #endif
 
-    if (shared_config.async_events & SharedConfig::ASYNC_SDLEVENTS_BEG)
+    if (Global::shared_config.async_events & SharedConfig::ASYNC_SDLEVENTS_BEG)
         sdlEventQueue.waitForEmpty();
 
     // ThreadSync::detSignalGlobal(0);
@@ -584,20 +563,25 @@ void frameBoundary(std::function<void()> draw)
     /* Decide if we skip drawing the next frame because of fastforward.
      * It is stored in an extern so that we can disable opengl draws.
      */
-    skipping_draw = skipDraw(fps);
+    Global::skipping_draw = skipDraw(fps);
 
     detTimer.exitFrameBoundary();
+
+    perfTimer.switchTimer(PerfTimer::GameTimer);
+    
+    // if ((framecount % 10000) == 9999)
+    //     perfTimer.print();
 }
 
 static void pushQuitEvent(void)
 {
-    if (game_info.video & GameInfo::SDL1) {
+    if (Global::game_info.video & GameInfo::SDL1) {
         SDL1::SDL_Event ev;
         ev.type = SDL1::SDL_QUIT;
         sdlEventQueue.insert(&ev);
     }
 
-    if (game_info.video & GameInfo::SDL2) {
+    if (Global::game_info.video & GameInfo::SDL2) {
         SDL_Event ev;
         ev.type = SDL_QUIT;
         sdlEventQueue.insert(&ev);
@@ -626,29 +610,19 @@ static void pushQuitEvent(void)
 }
 
 
-#ifdef LIBTAS_ENABLE_HUD
 static void screen_redraw(std::function<void()> draw, RenderHUD& hud, AllInputs preview_ai)
-#else
-static void screen_redraw(std::function<void()> draw, AllInputs preview_ai)
-#endif
 {
-    if (!skipping_draw && draw) {
+    if (!Global::skipping_draw && draw) {
         ScreenCapture::copySurfaceToScreen();
 
-#ifdef LIBTAS_ENABLE_HUD
         hud.drawAll(framecount, nondraw_framecount, ai, preview_ai);
-#endif
 
         GlobalNoLog gnl;
         NATIVECALL(draw());
     }
 }
 
-#ifdef LIBTAS_ENABLE_HUD
 static void receive_messages(std::function<void()> draw, RenderHUD& hud)
-#else
-static void receive_messages(std::function<void()> draw)
-#endif
 {
     AllInputs preview_ai;
     preview_ai.emptyInputs();
@@ -659,13 +633,11 @@ static void receive_messages(std::function<void()> draw)
     while (1) {
         int slot = SaveStateManager::waitChild();
         if (slot < 0) break;
-#ifdef LIBTAS_ENABLE_HUD
         std::string msg = "State ";
         msg += std::to_string(slot);
         msg += " saved";
         RenderHUD::insertMessage(msg.c_str());
         screen_redraw(draw, hud, preview_ai);
-#endif
     }
 
     while (1)
@@ -680,29 +652,33 @@ static void receive_messages(std::function<void()> draw)
 #elif defined(__APPLE__) && defined(__MACH__)
             /* We need to poll events, otherwise the game appears as non-responsive.
              * TODO: Put this at appropriate place */
-            if ((game_info.video & GameInfo::SDL1) || (game_info.video & GameInfo::SDL2)) {
+            if ((Global::game_info.video & GameInfo::SDL1) || (Global::game_info.video & GameInfo::SDL2)) {
                 LINK_NAMESPACE_SDLX(SDL_PumpEvents);
                 orig::SDL_PumpEvents();
             }
 #endif
             
             /* Resume execution if game is exiting */
-            if (is_exiting)
+            if (Global::is_exiting)
                 return;
             
-            NATIVECALL(usleep(1000));
+            /* We only sleep if the game is in fast-forward, so that we don't
+             * impact its performance. */
+            if (! Global::shared_config.fastforward) {
+                perfTimer.switchTimer(PerfTimer::IdleTimer);
+                NATIVECALL(usleep(100));
+                perfTimer.switchTimer(PerfTimer::FrameTimer);                
+            }
 
             /* Catch dead children spawned for state saving */
             while (1) {
                 int slot = SaveStateManager::waitChild();
                 if (slot < 0) break;
-#ifdef LIBTAS_ENABLE_HUD
                 std::string msg = "State ";
                 msg += std::to_string(slot);
                 msg += " saved";
                 RenderHUD::insertMessage(msg.c_str());
                 screen_redraw(draw, hud, preview_ai);
-#endif
             }
         }
         int status;
@@ -713,11 +689,11 @@ static void receive_messages(std::function<void()> draw)
                 break;
             case MSGN_USERQUIT:
                 pushQuitEvent();
-                is_exiting = true;
+                Global::is_exiting = true;
                 break;
 
             case MSGN_CONFIG:
-                receiveData(&shared_config, sizeof(SharedConfig));
+                receiveData(&Global::shared_config, sizeof(SharedConfig));
                 break;
 
             case MSGN_DUMP_FILE:
@@ -730,9 +706,9 @@ static void receive_messages(std::function<void()> draw)
             case MSGN_ALL_INPUTS:
                 receiveData(&ai, sizeof(AllInputs));
                 /* Update framerate if necessary (do we actually need to?) */
-                if (shared_config.variable_framerate) {
-                    shared_config.framerate_num = ai.framerate_num;
-                    shared_config.framerate_den = ai.framerate_den;
+                if (Global::shared_config.variable_framerate) {
+                    Global::shared_config.framerate_num = ai.framerate_num;
+                    Global::shared_config.framerate_den = ai.framerate_den;
                 }
                 /* Set new realtime value */
                 if (ai.realtime_sec)
@@ -741,20 +717,12 @@ static void receive_messages(std::function<void()> draw)
                 break;
 
             case MSGN_EXPOSE:
-#ifdef LIBTAS_ENABLE_HUD
                 screen_redraw(draw, hud, preview_ai);
-#else
-                screen_redraw(draw, preview_ai);
-#endif
                 break;
 
             case MSGN_PREVIEW_INPUTS:
                 receiveData(&preview_ai, sizeof(AllInputs));
-#ifdef LIBTAS_ENABLE_HUD
                 screen_redraw(draw, hud, preview_ai);
-#else
-                screen_redraw(draw, preview_ai);
-#endif
                 break;
 
             case MSGN_SAVESTATE_PATH:
@@ -797,7 +765,7 @@ static void receive_messages(std::function<void()> draw)
                     /* We receive the shared config struct */
                     message = receiveMessage();
                     MYASSERT(message == MSGN_CONFIG)
-                    receiveData(&shared_config, sizeof(SharedConfig));
+                    receiveData(&Global::shared_config, sizeof(SharedConfig));
 
                     /* We must send again the frame count and time because it
                      * probably has changed.
@@ -805,20 +773,15 @@ static void receive_messages(std::function<void()> draw)
                     sendFrameCountTime();
 
                     /* Screen should have changed after loading */
-#ifdef LIBTAS_ENABLE_HUD
                     screen_redraw(draw, hud, preview_ai);
-#else
-                    screen_redraw(draw, preview_ai);
-#endif
                 }
                 else if (status == 0) {
                     /* Tell the program that the saving succeeded */
                     sendMessage(MSGB_SAVING_SUCCEEDED);
 
                     /* Print the successful message, unless we are saving in a fork */
-#ifdef LIBTAS_ENABLE_HUD
-                    if (!(shared_config.savestate_settings & SharedConfig::SS_FORK)) {
-                        if (shared_config.osd & SharedConfig::OSD_MESSAGES) {
+                    if (!(Global::shared_config.savestate_settings & SharedConfig::SS_FORK)) {
+                        if (Global::shared_config.osd & SharedConfig::OSD_MESSAGES) {
                             std::string msg;
                             msg = "State ";
                             msg += std::to_string(slot);
@@ -827,7 +790,6 @@ static void receive_messages(std::function<void()> draw)
                             screen_redraw(draw, hud, preview_ai);
                         }
                     }
-#endif
 
                 }
                 else {
@@ -853,7 +815,7 @@ static void receive_messages(std::function<void()> draw)
                 if (avencoder) {
                     debuglogstdio(LCF_DUMP, "Stop AV dumping");
                     avencoder.reset(nullptr);
-                    shared_config.av_dumping = false;
+                    Global::shared_config.av_dumping = false;
 
                     /* Update title without changing fps */
                     WindowTitle::update(-1, -1);
@@ -861,10 +823,8 @@ static void receive_messages(std::function<void()> draw)
                 break;
 
             case MSGN_OSD_MSG:
-#ifdef LIBTAS_ENABLE_HUD
                 RenderHUD::insertMessage(receiveString().c_str());
                 screen_redraw(draw, hud, preview_ai);
-#endif
                 break;
 
             case MSGN_END_FRAMEBOUNDARY:

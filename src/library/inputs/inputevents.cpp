@@ -35,7 +35,8 @@
 #include "sdltextinput.h" // SDL_EnableUNICODE
 #include "../sdl/SDLEventQueue.h"
 #include "../../external/SDL1.h"
-#include "../global.h" // game_info
+#include "../global.h" // Global::game_info
+#include "../GlobalState.h"
 #include <stdlib.h>
 #include <SDL2/SDL.h>
 
@@ -60,7 +61,8 @@
 
 namespace libtas {
 
-void generateKeyUpEvents(void)
+/* Generate events of type SDL_KEYUP or KeyRelease */
+static void generateKeyUpEvents(void)
 {
     int i, j;
 
@@ -79,7 +81,7 @@ void generateKeyUpEvents(void)
         }
         if (j == AllInputs::MAXKEYS) {
             /* Key was released. Generate event */
-            if (game_info.keyboard & GameInfo::SDL2) {
+            if (Global::game_info.keyboard & GameInfo::SDL2) {
                 SDL_Event event2;
                 event2.type = SDL_KEYUP;
                 event2.key.state = SDL_RELEASED;
@@ -97,7 +99,7 @@ void generateKeyUpEvents(void)
                 debuglogstdio(LCF_SDL | LCF_EVENTS | LCF_KEYBOARD, "Generate SDL event KEYUP with key %d", event2.key.keysym.sym);
             }
 
-            if (game_info.keyboard & GameInfo::SDL1) {
+            if (Global::game_info.keyboard & GameInfo::SDL1) {
                 SDL1::SDL_Event event1;
                 event1.type = SDL1::SDL_KEYUP;
                 event1.key.which = 0; // FIXME: I don't know what is going here
@@ -121,7 +123,7 @@ void generateKeyUpEvents(void)
             }
 
 #ifdef __unix__
-            if ((game_info.keyboard & GameInfo::XEVENTS) && !x11::gameXWindows.empty()) {
+            if ((Global::game_info.keyboard & GameInfo::XEVENTS) && !x11::gameXWindows.empty()) {
                 XEvent event;
                 event.xkey.type = KeyRelease;
                 event.xkey.state = 0; // TODO: Do we have to set the key modifiers?
@@ -142,7 +144,7 @@ void generateKeyUpEvents(void)
                 debuglogstdio(LCF_EVENTS | LCF_KEYBOARD, "Generate XEvent KeyRelease with keycode %d", event.xkey.keycode);
             }
 
-            if ((game_info.keyboard & GameInfo::XCBEVENTS) && !x11::gameXWindows.empty()) {
+            if ((Global::game_info.keyboard & GameInfo::XCBEVENTS) && !x11::gameXWindows.empty()) {
                 xcb_key_release_event_t event;
                 event.response_type = XCB_KEY_RELEASE;
                 event.state = 0; // TODO: Do we have to set the key modifiers?
@@ -162,7 +164,7 @@ void generateKeyUpEvents(void)
                 debuglogstdio(LCF_EVENTS | LCF_KEYBOARD, "Generate xcb XCB_KEY_RELEASE with keycode %d", event.detail);
             }
 
-            if ((game_info.keyboard & GameInfo::XIEVENTS) && !x11::gameXWindows.empty()) {
+            if ((Global::game_info.keyboard & GameInfo::XIEVENTS) && !x11::gameXWindows.empty()) {
                 XEvent event;
                 XIDeviceEvent *dev = static_cast<XIDeviceEvent*>(calloc(1, sizeof(XIDeviceEvent)));
                 event.xcookie.type = GenericEvent;
@@ -172,6 +174,8 @@ void generateKeyUpEvents(void)
                 dev->evtype = XI_KeyRelease;
                 dev->event = x11::gameXWindows.front();
                 dev->time = timestamp; // TODO: Wrong! timestamp is from X server start
+                dev->deviceid = 3;
+                dev->sourceid = 3;
                 NOLOGCALL(dev->detail = XKeysymToKeycode(nullptr, old_game_ai.keyboard[i]));
                 for (int d=0; d<GAMEDISPLAYNUM; d++) {
                     if (x11::gameDisplays[d]) {
@@ -183,7 +187,7 @@ void generateKeyUpEvents(void)
                 debuglogstdio(LCF_EVENTS | LCF_KEYBOARD, "Generate XIEvent KeyRelease with keycode %d", dev->detail);
             }
 
-            if (game_info.keyboard & GameInfo::XIRAWEVENTS) {
+            if (Global::game_info.keyboard & GameInfo::XIRAWEVENTS) {
                 XEvent event;
                 XIRawEvent *rev = static_cast<XIRawEvent*>(calloc(1, sizeof(XIRawEvent)));
                 event.xcookie.type = GenericEvent;
@@ -202,9 +206,8 @@ void generateKeyUpEvents(void)
     }
 }
 
-
 /* Generate pressed keyboard input events */
-void generateKeyDownEvents(void)
+static void generateKeyDownEvents(void)
 {
     int i,j;
 
@@ -223,7 +226,7 @@ void generateKeyDownEvents(void)
         }
         if (j == AllInputs::MAXKEYS) {
             /* Key was pressed. Generate event */
-            if (game_info.keyboard & GameInfo::SDL2) {
+            if (Global::game_info.keyboard & GameInfo::SDL2) {
                 SDL_Event event2;
                 event2.type = SDL_KEYDOWN;
                 event2.key.state = SDL_PRESSED;
@@ -257,7 +260,7 @@ void generateKeyDownEvents(void)
                 }
             }
 
-            if (game_info.keyboard & GameInfo::SDL1) {
+            if (Global::game_info.keyboard & GameInfo::SDL1) {
                 SDL1::SDL_Event event1;
                 event1.type = SDL1::SDL_KEYDOWN;
                 event1.key.which = 0; // FIXME: I don't know what is going here
@@ -281,7 +284,7 @@ void generateKeyDownEvents(void)
             }
 
 #ifdef __unix__
-            if ((game_info.keyboard & GameInfo::XEVENTS) && !x11::gameXWindows.empty()) {
+            if ((Global::game_info.keyboard & GameInfo::XEVENTS) && !x11::gameXWindows.empty()) {
                 XEvent event;
                 event.xkey.type = KeyPress;
                 event.xkey.state = 0; // TODO: Do we have to set the key modifiers?
@@ -302,7 +305,7 @@ void generateKeyDownEvents(void)
                 debuglogstdio(LCF_EVENTS | LCF_KEYBOARD, "Generate XEvent KeyPress with keycode %d", event.xkey.keycode);
             }
 
-            if ((game_info.keyboard & GameInfo::XCBEVENTS) && !x11::gameXWindows.empty()) {
+            if ((Global::game_info.keyboard & GameInfo::XCBEVENTS) && !x11::gameXWindows.empty()) {
                 xcb_key_press_event_t event;
                 event.response_type = XCB_KEY_PRESS;
                 event.state = 0; // TODO: Do we have to set the key modifiers?
@@ -322,7 +325,7 @@ void generateKeyDownEvents(void)
                 debuglogstdio(LCF_EVENTS | LCF_KEYBOARD, "Generate xcb XCB_KEY_PRESS with keycode %d", event.detail);
             }
 
-            if ((game_info.keyboard & GameInfo::XIEVENTS) && !x11::gameXWindows.empty()) {
+            if ((Global::game_info.keyboard & GameInfo::XIEVENTS) && !x11::gameXWindows.empty()) {
                 XEvent event;
                 XIDeviceEvent *dev = static_cast<XIDeviceEvent*>(calloc(1, sizeof(XIDeviceEvent)));
                 event.xcookie.type = GenericEvent;
@@ -332,6 +335,8 @@ void generateKeyDownEvents(void)
                 dev->evtype = XI_KeyPress;
                 dev->event = x11::gameXWindows.front();
                 dev->time = timestamp;
+                dev->deviceid = 3;
+                dev->sourceid = 3;
                 NOLOGCALL(dev->detail = XKeysymToKeycode(nullptr, game_ai.keyboard[i]));
                 for (int d=0; d<GAMEDISPLAYNUM; d++) {
                     if (x11::gameDisplays[d]) {
@@ -343,7 +348,7 @@ void generateKeyDownEvents(void)
                 debuglogstdio(LCF_EVENTS | LCF_KEYBOARD, "Generate XIEvent KeyPress with keycode %d", dev->detail);
             }
 
-            if (game_info.keyboard & GameInfo::XIRAWEVENTS) {
+            if (Global::game_info.keyboard & GameInfo::XIRAWEVENTS) {
                 XEvent event;
                 XIRawEvent *rev = static_cast<XIRawEvent*>(calloc(1, sizeof(XIRawEvent)));
                 event.xcookie.type = GenericEvent;
@@ -362,9 +367,10 @@ void generateKeyDownEvents(void)
     }
 }
 
-void generateControllerAdded(void)
+/* Generate events indicating that a controller was plugged in */
+static void generateControllerAdded(void)
 {
-    if (!(game_info.joystick & GameInfo::SDL2))
+    if (!(Global::game_info.joystick & GameInfo::SDL2))
         return;
 
     struct timespec time = detTimer.getTicks();
@@ -374,7 +380,7 @@ void generateControllerAdded(void)
 
     if (!init_added) {
         init_added = true;
-        for (int i = 0; i < shared_config.nb_controllers; i++) {
+        for (int i = 0; i < Global::shared_config.nb_controllers; i++) {
             SDL_Event ev;
             ev.type = SDL_CONTROLLERDEVICEADDED;
             ev.cdevice.timestamp = timestamp;
@@ -392,71 +398,50 @@ void generateControllerAdded(void)
 
     if (!game_ai.flags) return;
 
-    int added_flags[4] = {
-        SingleInput::FLAG_CONTROLLER1_ADDED,
-        SingleInput::FLAG_CONTROLLER2_ADDED,
-        SingleInput::FLAG_CONTROLLER3_ADDED,
-        SingleInput::FLAG_CONTROLLER4_ADDED,
+    int changed_flags[4] = {
+        SingleInput::FLAG_CONTROLLER1_ADDED_REMOVED,
+        SingleInput::FLAG_CONTROLLER2_ADDED_REMOVED,
+        SingleInput::FLAG_CONTROLLER3_ADDED_REMOVED,
+        SingleInput::FLAG_CONTROLLER4_ADDED_REMOVED,
     };
 
     for (int i=0; i<4; i++) {
-        if ((game_ai.flags & (1<<added_flags[i])) &&
-            (shared_config.nb_controllers >= i)) {
+        if ((game_ai.flags & (1<<changed_flags[i])) &&
+            (Global::shared_config.nb_controllers >= i)) {
+                
+            bool attached = mySDL_GameControllerIsAttached(i);
             SDL_Event ev;
-            ev.type = SDL_CONTROLLERDEVICEADDED;
+            ev.type = attached ? SDL_CONTROLLERDEVICEREMOVED : SDL_CONTROLLERDEVICEADDED;
             ev.cdevice.timestamp = timestamp;
             ev.cdevice.which = i;
             sdlEventQueue.insert(&ev);
-            debuglogstdio(LCF_SDL | LCF_EVENTS | LCF_JOYSTICK, "Generate SDL event SDL_CONTROLLERDEVICEADDED with joy %d", i);
+            if (attached)
+                debuglogstdio(LCF_SDL | LCF_EVENTS | LCF_JOYSTICK, "Generate SDL event SDL_CONTROLLERDEVICEREMOVED with joy %d", i);
+            else
+                debuglogstdio(LCF_SDL | LCF_EVENTS | LCF_JOYSTICK, "Generate SDL event SDL_CONTROLLERDEVICEADDED with joy %d", i);
 
-            ev.type = SDL_JOYDEVICEADDED;
+            ev.type = attached ? SDL_JOYDEVICEADDED : SDL_JOYDEVICEREMOVED;
             ev.jdevice.timestamp = timestamp;
             ev.jdevice.which = i;
             sdlEventQueue.insert(&ev);
-            debuglogstdio(LCF_SDL | LCF_EVENTS | LCF_JOYSTICK, "Generate SDL event SDL_JOYDEVICEADDED with joy %d", i);
-        }
-    }
-
-    int removed_flags[4] = {
-        SingleInput::FLAG_CONTROLLER1_REMOVED,
-        SingleInput::FLAG_CONTROLLER2_REMOVED,
-        SingleInput::FLAG_CONTROLLER3_REMOVED,
-        SingleInput::FLAG_CONTROLLER4_REMOVED,
-    };
-
-    for (int i=0; i<4; i++) {
-        if ((game_ai.flags & (1<<removed_flags[i])) &&
-            (shared_config.nb_controllers >= i)) {
-            SDL_Event ev;
-            ev.type = SDL_CONTROLLERDEVICEREMOVED;
-            ev.cdevice.timestamp = timestamp;
-            ev.cdevice.which = i;
-            sdlEventQueue.insert(&ev);
-            debuglogstdio(LCF_SDL | LCF_EVENTS | LCF_JOYSTICK, "Generate SDL event SDL_CONTROLLERDEVICEREMOVED with joy %d", i);
-
-            ev.type = SDL_JOYDEVICEREMOVED;
-            ev.jdevice.timestamp = timestamp;
-            ev.jdevice.which = i;
-            sdlEventQueue.insert(&ev);
-            debuglogstdio(LCF_SDL | LCF_EVENTS | LCF_JOYSTICK, "Generate SDL event SDL_JOYDEVICEADDED with joy %d", i);
-
-            /* Disconnect connected joystick */
-            GlobalNoLog gnl;
-            while (SDL_GameControllerGetAttached(reinterpret_cast<SDL_GameController*>(&i)))
-                SDL_GameControllerClose(reinterpret_cast<SDL_GameController*>(&i));
-
-            while (SDL_JoystickGetAttached(reinterpret_cast<SDL_Joystick*>(&i)))
-                SDL_JoystickClose(reinterpret_cast<SDL_Joystick*>(&i));
+            if (attached)
+                debuglogstdio(LCF_SDL | LCF_EVENTS | LCF_JOYSTICK, "Generate SDL event SDL_JOYDEVICEREMOVED with joy %d", i);
+            else
+                debuglogstdio(LCF_SDL | LCF_EVENTS | LCF_JOYSTICK, "Generate SDL event SDL_JOYDEVICEADDED with joy %d", i);
+                
+            /* Change the state of controller */
+            mySDL_GameControllerChangeAttached(i);
         }
     }
 }
 
-void generateControllerEvents(void)
+/* Same as KeyUp/KeyDown functions but with controller events */
+static void generateControllerEvents(void)
 {
     struct timespec time = detTimer.getTicks();
     int timestamp = time.tv_sec * 1000 + time.tv_nsec / 1000000;
 
-    for (int ji=0; ji<shared_config.nb_controllers; ji++) {
+    for (int ji=0; ji<Global::shared_config.nb_controllers; ji++) {
 
         /* Check if we need to generate any joystick events for that
          * particular joystick. If not, we {continue;} here because
@@ -466,7 +451,7 @@ void generateControllerEvents(void)
          */
         bool genGC = true, genJoy = true;
 
-        if (game_info.joystick & GameInfo::SDL2) {
+        if (Global::game_info.joystick & GameInfo::SDL2) {
             GlobalNoLog gnl;
             genGC = (SDL_GameControllerEventState(SDL_QUERY) == SDL_ENABLE) && SDL_GameControllerGetAttached(reinterpret_cast<SDL_GameController*>(&ji));
             //bool genJoy = (SDL_JoystickEventState(SDL_QUERY) == SDL_ENABLE) && SDL_JoystickGetAttached(&ji);
@@ -477,7 +462,7 @@ void generateControllerEvents(void)
                 continue;
         }
 
-        if (game_info.joystick & GameInfo::SDL1) {
+        if (Global::game_info.joystick & GameInfo::SDL1) {
             GlobalNoLog gnl;
             genJoy = (SDL_JoystickEventState(SDL_QUERY) == SDL_ENABLE) && SDL_JoystickGetAttached(reinterpret_cast<SDL_Joystick*>(&ji));
 
@@ -490,7 +475,7 @@ void generateControllerEvents(void)
             if (game_ai.controller_axes[ji][axis] != old_game_ai.controller_axes[ji][axis]) {
                 /* We got a change in a controller axis value */
 
-                if (game_info.joystick & GameInfo::SDL2) {
+                if (Global::game_info.joystick & GameInfo::SDL2) {
                     if (genGC) {
                         SDL_Event event2;
                         event2.type = SDL_CONTROLLERAXISMOTION;
@@ -513,7 +498,7 @@ void generateControllerEvents(void)
                     }
                 }
 
-                if (game_info.joystick & GameInfo::SDL1) {
+                if (Global::game_info.joystick & GameInfo::SDL1) {
                     SDL1::SDL_Event event1;
                     event1.type = SDL1::SDL_JOYAXISMOTION;
                     event1.jaxis.which = ji;
@@ -524,7 +509,7 @@ void generateControllerEvents(void)
                 }
 
 #ifdef __linux__
-                if (game_info.joystick & GameInfo::JSDEV) {
+                if (Global::game_info.joystick & GameInfo::JSDEV) {
                     struct js_event ev;
                     ev.time = timestamp;
                     ev.type = JS_EVENT_AXIS;
@@ -534,7 +519,7 @@ void generateControllerEvents(void)
                     debuglogstdio(LCF_EVENTS | LCF_JOYSTICK, "Generate jsdev event JS_EVENT_AXIS with axis %d", axis);
                 }
 
-                if (game_info.joystick & GameInfo::EVDEV) {
+                if (Global::game_info.joystick & GameInfo::EVDEV) {
                     struct input_event ev;
                     ev.time.tv_sec = time.tv_sec;
                     ev.time.tv_usec = time.tv_nsec / 1000;
@@ -560,7 +545,7 @@ void generateControllerEvents(void)
             if (((buttons >> bi) & 0x1) != ((old_buttons >> bi) & 0x1)) {
                 /* We got a change in a button state */
 
-                if (game_info.joystick & GameInfo::SDL2) {
+                if (Global::game_info.joystick & GameInfo::SDL2) {
                     if (genGC) {
                         /* SDL2 controller button */
                         SDL_Event event2;
@@ -606,7 +591,7 @@ void generateControllerEvents(void)
                     }
                 }
 
-                if (game_info.joystick & GameInfo::SDL1) {
+                if (Global::game_info.joystick & GameInfo::SDL1) {
                     if (bi < 11) {
                         /* SDL1 joystick button */
                         SDL1::SDL_Event event1;
@@ -630,7 +615,7 @@ void generateControllerEvents(void)
                 }
 
 #ifdef __linux__
-                if (game_info.joystick & GameInfo::JSDEV) {
+                if (Global::game_info.joystick & GameInfo::JSDEV) {
                     if (bi < 11) { // JSDEV joystick only has 11 buttons
                         struct js_event ev;
                         ev.time = timestamp;
@@ -645,7 +630,7 @@ void generateControllerEvents(void)
                     }
                 }
 
-                if (game_info.joystick & GameInfo::EVDEV) {
+                if (Global::game_info.joystick & GameInfo::EVDEV) {
                     if (bi < 11) { // EVDEV joystick only has 11 buttons
                         struct input_event ev;
                         ev.time.tv_sec = time.tv_sec;
@@ -667,7 +652,7 @@ void generateControllerEvents(void)
         /* Generate hat state */
         if (hatHasChanged) {
 
-            if (game_info.joystick & GameInfo::SDL2) {
+            if (Global::game_info.joystick & GameInfo::SDL2) {
                 /* SDL2 joystick hat */
                 SDL_Event event2;
                 event2.type = SDL_JOYHATMOTION;
@@ -679,7 +664,7 @@ void generateControllerEvents(void)
                 debuglogstdio(LCF_SDL | LCF_EVENTS | LCF_JOYSTICK, "Generate SDL event JOYHATMOTION with hat %d", (int)event2.jhat.value);
             }
 
-            if (game_info.joystick & GameInfo::SDL1) {
+            if (Global::game_info.joystick & GameInfo::SDL1) {
                 /* SDL1 joystick hat */
                 SDL1::SDL_Event event1;
                 event1.type = SDL1::SDL_JOYHATMOTION;
@@ -691,7 +676,7 @@ void generateControllerEvents(void)
             }
 
 #ifdef __linux__
-            if (game_info.joystick & GameInfo::JSDEV) {
+            if (Global::game_info.joystick & GameInfo::JSDEV) {
                 /* Hat status is represented as 7th and 8th axes */
 
                 int hatx = SingleInput::toDevHatX(buttons);
@@ -719,7 +704,7 @@ void generateControllerEvents(void)
                 }
             }
 
-            if (game_info.joystick & GameInfo::EVDEV) {
+            if (Global::game_info.joystick & GameInfo::EVDEV) {
                 int hatx = SingleInput::toDevHatX(buttons);
                 int oldhatx = SingleInput::toDevHatX(old_buttons);
                 if (hatx != oldhatx) {
@@ -751,14 +736,15 @@ void generateControllerEvents(void)
     }
 }
 
-void generateMouseMotionEvents(void)
+/* Same as above with MouseMotion event */
+static void generateMouseMotionEvents(void)
 {
     struct timespec time = detTimer.getTicks();
     int timestamp = time.tv_sec * 1000 + time.tv_nsec / 1000000;
 
 #ifdef __unix__
     /* XIRAWEVENTS are special because they output raw pointer events */
-    if ((game_info.mouse & GameInfo::XIRAWEVENTS) &&
+    if ((Global::game_info.mouse & GameInfo::XIRAWEVENTS) &&
         ((game_unclipped_ai.pointer_x != old_game_unclipped_ai.pointer_x) || (game_unclipped_ai.pointer_y != old_game_unclipped_ai.pointer_y))) {
         XEvent event;
         XIRawEvent *rev = static_cast<XIRawEvent*>(calloc(1, sizeof(XIRawEvent)));
@@ -789,7 +775,7 @@ void generateMouseMotionEvents(void)
     if ((game_ai.pointer_x == old_game_ai.pointer_x) && (game_ai.pointer_y == old_game_ai.pointer_y))
         return;
 
-    if (game_info.mouse & GameInfo::SDL2) {
+    if (Global::game_info.mouse & GameInfo::SDL2) {
         SDL_Event event2;
         event2.type = SDL_MOUSEMOTION;
         event2.motion.timestamp = timestamp;
@@ -808,7 +794,7 @@ void generateMouseMotionEvents(void)
         debuglogstdio(LCF_SDL | LCF_EVENTS | LCF_MOUSE, "Generate SDL event MOUSEMOTION with new position (%d,%d)", game_ai.pointer_x, game_ai.pointer_y);
     }
 
-    if (game_info.mouse & GameInfo::SDL1) {
+    if (Global::game_info.mouse & GameInfo::SDL1) {
         SDL1::SDL_Event event1;
         event1.type = SDL1::SDL_MOUSEMOTION;
         event1.motion.which = 0; // TODO: Mouse instance id. No idea what to put here...
@@ -826,7 +812,7 @@ void generateMouseMotionEvents(void)
     }
 
 #ifdef __unix__
-    if ((game_info.mouse & GameInfo::XEVENTS) && !x11::gameXWindows.empty()) {
+    if ((Global::game_info.mouse & GameInfo::XEVENTS) && !x11::gameXWindows.empty()) {
         XEvent event;
         event.xmotion.type = MotionNotify;
         event.xmotion.state = SingleInput::toXlibPointerMask(game_ai.pointer_mask);
@@ -849,7 +835,7 @@ void generateMouseMotionEvents(void)
         debuglogstdio(LCF_EVENTS | LCF_MOUSE, "Generate Xlib event MotionNotify with new position (%d,%d)", game_ai.pointer_x, game_ai.pointer_y);
     }
 
-    if ((game_info.mouse & GameInfo::XCBEVENTS) && !x11::gameXWindows.empty()) {
+    if ((Global::game_info.mouse & GameInfo::XCBEVENTS) && !x11::gameXWindows.empty()) {
         xcb_motion_notify_event_t event;
         event.response_type = XCB_MOTION_NOTIFY;
         event.state = SingleInput::toXlibPointerMask(game_ai.pointer_mask);
@@ -867,7 +853,7 @@ void generateMouseMotionEvents(void)
         debuglogstdio(LCF_EVENTS | LCF_MOUSE, "Generate xcb event XCB_MOTION_NOTIFY with new position (%d,%d)", game_ai.pointer_x, game_ai.pointer_y);
     }
 
-    if ((game_info.mouse & GameInfo::XIEVENTS) && !x11::gameXWindows.empty()) {
+    if ((Global::game_info.mouse & GameInfo::XIEVENTS) && !x11::gameXWindows.empty()) {
         XEvent event;
         XIDeviceEvent *dev = static_cast<XIDeviceEvent*>(calloc(1, sizeof(XIDeviceEvent)));
         event.xcookie.type = GenericEvent;
@@ -877,6 +863,8 @@ void generateMouseMotionEvents(void)
         dev->evtype = XI_Motion;
         dev->event = x11::gameXWindows.front();
         dev->time = timestamp;
+        dev->deviceid = 2;
+        dev->sourceid = 2;
         dev->event_x = game_ai.pointer_x;
         dev->event_y = game_ai.pointer_y;
         dev->root_x = dev->event_x;
@@ -894,6 +882,7 @@ void generateMouseMotionEvents(void)
 #endif
 }
 
+/* Same as above with the MouseButton event */
 void generateMouseButtonEvents(void)
 {
     struct timespec time = detTimer.getTicks();
@@ -908,7 +897,7 @@ void generateMouseButtonEvents(void)
             /* We got a change in a button state */
 
             /* Fill the event structure */
-            if (game_info.mouse & GameInfo::SDL2) {
+            if (Global::game_info.mouse & GameInfo::SDL2) {
                 SDL_Event event2;
                 if (game_ai.pointer_mask & (1 << buttons[bi])) {
                     event2.type = SDL_MOUSEBUTTONDOWN;
@@ -930,7 +919,7 @@ void generateMouseButtonEvents(void)
                 sdlEventQueue.insert(&event2);
             }
 
-            if (game_info.mouse & GameInfo::SDL1) {
+            if (Global::game_info.mouse & GameInfo::SDL1) {
                 SDL1::SDL_Event event1;
                 if (game_ai.pointer_mask & (1 << buttons[bi])) {
                     event1.type = SDL1::SDL_MOUSEBUTTONDOWN;
@@ -950,7 +939,7 @@ void generateMouseButtonEvents(void)
             }
 
 #ifdef __unix__
-            if ((game_info.mouse & GameInfo::XEVENTS) && !x11::gameXWindows.empty()) {
+            if ((Global::game_info.mouse & GameInfo::XEVENTS) && !x11::gameXWindows.empty()) {
                 XEvent event;
                 if (game_ai.pointer_mask & (1 << buttons[bi])) {
                     event.xbutton.type = ButtonPress;
@@ -978,7 +967,7 @@ void generateMouseButtonEvents(void)
                 xlibEventQueueList.insert(&event);
             }
 
-            if ((game_info.mouse & GameInfo::XCBEVENTS) && !x11::gameXWindows.empty()) {
+            if ((Global::game_info.mouse & GameInfo::XCBEVENTS) && !x11::gameXWindows.empty()) {
                 xcb_button_press_event_t event; // same as xcb_button_release_event_t
                 if (game_ai.pointer_mask & (1 << buttons[bi])) {
                     event.response_type = XCB_BUTTON_PRESS;
@@ -1002,7 +991,7 @@ void generateMouseButtonEvents(void)
                 xcbEventQueueList.insert(reinterpret_cast<xcb_generic_event_t*>(&event));
             }
 
-            if ((game_info.mouse & GameInfo::XIEVENTS) && !x11::gameXWindows.empty()) {
+            if ((Global::game_info.mouse & GameInfo::XIEVENTS) && !x11::gameXWindows.empty()) {
                 XEvent event;
                 XIDeviceEvent *dev = static_cast<XIDeviceEvent*>(calloc(1, sizeof(XIDeviceEvent)));
                 event.xcookie.type = GenericEvent;
@@ -1020,6 +1009,8 @@ void generateMouseButtonEvents(void)
                 event.xcookie.data = dev;
                 dev->event = x11::gameXWindows.front();
                 dev->time = timestamp;
+                dev->deviceid = 2;
+                dev->sourceid = 2;
                 dev->event_x = game_ai.pointer_x;
                 dev->event_y = game_ai.pointer_y;
                 dev->root_x = dev->event_x;
@@ -1040,7 +1031,7 @@ void generateMouseButtonEvents(void)
                 }
             }
 
-            if (game_info.mouse & GameInfo::XIRAWEVENTS) {
+            if (Global::game_info.mouse & GameInfo::XIRAWEVENTS) {
                 XEvent event;
                 XIRawEvent *rev = static_cast<XIRawEvent*>(calloc(1, sizeof(XIRawEvent)));
                 event.xcookie.type = GenericEvent;
@@ -1065,20 +1056,110 @@ void generateMouseButtonEvents(void)
     }
 }
 
+/* Generate focus/unfocus event */
+static void generateFocusEvents(void)
+{
+    /* Keep here the status of window focus */
+    static bool win_focused = true;
+    
+    /* Check the focus flag */
+    if (!(game_ai.flags & (1<<SingleInput::FLAG_FOCUS_UNFOCUS)))
+        return;
+    
+    struct timespec time = detTimer.getTicks();
+    int timestamp = time.tv_sec * 1000 + time.tv_nsec / 1000000;
+
+    if (Global::game_info.keyboard & GameInfo::SDL2) {
+        SDL_Event event2;
+        event2.type = SDL_WINDOWEVENT;
+        if (win_focused) {
+            event2.window.event = SDL_WINDOWEVENT_FOCUS_LOST;
+            debuglogstdio(LCF_SDL | LCF_EVENTS | LCF_WINDOW, "Generate SDL event SDL_WINDOWEVENT_FOCUS_LOST");
+        }
+        else {
+            event2.window.event = SDL_WINDOWEVENT_FOCUS_GAINED;
+            debuglogstdio(LCF_SDL | LCF_EVENTS | LCF_WINDOW, "Generate SDL event SDL_WINDOWEVENT_FOCUS_GAINED");                        
+        }
+        event2.window.timestamp = timestamp;
+        event2.window.windowID = 1;
+        sdlEventQueue.insert(&event2);
+    }
+
+    if (Global::game_info.keyboard & GameInfo::SDL1) {
+        SDL1::SDL_Event event1;
+        event1.type = SDL1::SDL_ACTIVEEVENT;
+        event1.active.gain = !win_focused;
+        event1.active.state = SDL1::SDL_APPINPUTFOCUS;
+        debuglogstdio(LCF_SDL | LCF_EVENTS | LCF_WINDOW, "Generate SDL event SDL_ACTIVEEVENT with state SDL_APPINPUTFOCUS to %d", event1.active.gain);
+        sdlEventQueue.insert(&event1);
+    }
+
+#ifdef __unix__
+    if ((Global::game_info.keyboard & GameInfo::XEVENTS) && !x11::gameXWindows.empty()) {
+        XEvent event;
+        if (win_focused) {
+            event.type = FocusOut;
+            debuglogstdio(LCF_EVENTS | LCF_MOUSE, "Generate Xlib event FocusOut");
+        }
+        else {
+            event.type = FocusIn;
+            debuglogstdio(LCF_EVENTS | LCF_MOUSE, "Generate Xlib event FocusIn");            
+        }
+        event.xfocus.window = x11::gameXWindows.front();
+        event.xfocus.mode = NotifyNormal; // TODO
+        event.xfocus.send_event = 0;
+        event.xfocus.detail = NotifyDetailNone; // TODO
+        xlibEventQueueList.insert(&event);
+    }
+
+    if ((Global::game_info.keyboard & GameInfo::XCBEVENTS) && !x11::gameXWindows.empty()) {
+        
+        if (win_focused) {
+            xcb_focus_out_event_t event;
+            event.response_type = XCB_FOCUS_OUT;
+            debuglogstdio(LCF_EVENTS | LCF_MOUSE, "Generate xcb event XCB_FOCUS_OUT");
+            event.event = x11::gameXWindows.front();
+            xcbEventQueueList.insert(reinterpret_cast<xcb_generic_event_t*>(&event));
+        }
+        else {
+            xcb_focus_in_event_t event;
+            event.response_type = XCB_FOCUS_IN;
+            debuglogstdio(LCF_EVENTS | LCF_MOUSE, "Generate xcb event XCB_FOCUS_IN");
+            event.event = x11::gameXWindows.front();
+            xcbEventQueueList.insert(reinterpret_cast<xcb_generic_event_t*>(&event));
+        }
+    }
+#endif
+
+    /* Change state */
+    win_focused = !win_focused;
+}
+
+void generateInputEvents(void)
+{
+    generateKeyUpEvents();
+    generateKeyDownEvents();
+    generateControllerAdded();
+    generateControllerEvents();
+    generateMouseMotionEvents();
+    generateMouseButtonEvents();
+    generateFocusEvents();    
+}
+
 void syncControllerEvents()
 {
-    if (!(shared_config.async_events & (SharedConfig::ASYNC_JSDEV | SharedConfig::ASYNC_EVDEV)))
+    if (!(Global::shared_config.async_events & (SharedConfig::ASYNC_JSDEV | SharedConfig::ASYNC_EVDEV)))
         return;
 
-    if (!(game_info.joystick & (GameInfo::JSDEV | GameInfo::EVDEV)))
+    if (!(Global::game_info.joystick & (GameInfo::JSDEV | GameInfo::EVDEV)))
         return;
 
 #ifdef __linux__
     struct timespec time = detTimer.getTicks();
     int timestamp = time.tv_sec * 1000 + time.tv_nsec / 1000000;
 
-    for (int i = 0; i < shared_config.nb_controllers; i++) {
-        if (shared_config.async_events & SharedConfig::ASYNC_JSDEV) {
+    for (int i = 0; i < Global::shared_config.nb_controllers; i++) {
+        if (Global::shared_config.async_events & SharedConfig::ASYNC_JSDEV) {
             /* Send a synchronize report event */
             struct js_event ev;
             ev.time = timestamp;
@@ -1093,7 +1174,7 @@ void syncControllerEvents()
         }
 
         /* Same for evdev */
-        if (shared_config.async_events & SharedConfig::ASYNC_EVDEV) {
+        if (Global::shared_config.async_events & SharedConfig::ASYNC_EVDEV) {
             struct input_event ev;
             ev.time.tv_sec = time.tv_sec;
             ev.time.tv_usec = time.tv_nsec / 1000;

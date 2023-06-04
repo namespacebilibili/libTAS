@@ -18,11 +18,11 @@
  */
 
 #include "RenderHUD_GL.h"
-#ifdef LIBTAS_ENABLE_HUD
 
 #include "../logging.h"
 #include "../hook.h"
 #include "../ScreenCapture.h"
+#include "../GlobalState.h"
 
 namespace libtas {
 
@@ -436,5 +436,3 @@ void RenderHUD_GL::renderSurface(std::unique_ptr<SurfaceARGB> surf, int x, int y
 }
 
 }
-
-#endif

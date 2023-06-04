@@ -18,11 +18,11 @@
  */
 
 #include "RenderHUD_SDL2_surface.h"
-#ifdef LIBTAS_ENABLE_HUD
 
 #include "../logging.h"
 #include "../hook.h"
 #include "../sdl/sdlwindows.h" // sdl::gameSDLWindow
+#include "../GlobalState.h"
 
 #include <SDL2/SDL.h>
 
@@ -52,5 +52,3 @@ void RenderHUD_SDL2_surface::renderSurface(std::unique_ptr<SurfaceARGB> surf, in
 }
 
 }
-
-#endif

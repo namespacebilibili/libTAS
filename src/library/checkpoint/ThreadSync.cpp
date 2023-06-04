@@ -20,6 +20,8 @@
  */
 
 #include "ThreadSync.h"
+#include "ThreadInfo.h"
+#include "ThreadManager.h"
 #include "../logging.h"
 #include <time.h> // nanosleep
 #include "../sleepwrappers.h"
@@ -114,6 +116,7 @@ void ThreadSync::detWait()
 
     while (shouldWait) {
         shouldWait = false;
+        /* lock thread list here */
         for (ThreadInfo *thread = ThreadManager::getThreadList(); thread != nullptr; thread = thread->next) {
             /* Should wait if sync count has increased since last time */
             if (thread->syncCount > thread->syncOldCount) {
@@ -126,11 +129,21 @@ void ThreadSync::detWait()
             if (!thread->syncGo) {
                 shouldWait = true;
                 std::unique_lock<std::mutex> lock(detMutex);
-                detCond.wait(lock, [thread]{ return (thread->syncGo); });
+                bool ret;
+                /* Declare the following NATIVE, because std::condition_variable.wait_for()
+                 * eventually calls clock_gettime() to check for timeout, so it
+                 * must access the real clock time. */
+                NATIVECALL(ret = detCond.wait_for(lock, std::chrono::milliseconds(1000), [thread]{ return (thread->syncGo); }));
+                if (!ret) {
+                    debuglogstdio(LCF_WARNING, "Timeout waiting for loading thread %d", thread->tid);
+                    thread->syncEnabled = false;
+                }
                 thread->syncGo = false;
             }
         }
+
         if (shouldWait)
+        /* unlock and lock thread list here */
             NATIVECALL(usleep(100));
     }
 
@@ -145,7 +158,7 @@ void ThreadSync::detWaitGlobal(int i)
 {
     debuglogstdio(LCF_THREAD, "Wait on global lock %d", i);
     std::unique_lock<std::mutex> lock(detMutex);
-    detCond.wait(lock, [i]{ return (syncGo[i]); });
+    NATIVECALL(detCond.wait(lock, [i]{ return (syncGo[i]); }));
     syncGo[i] = false;
     debuglogstdio(LCF_THREAD, "End Wait on global lock %d", i);
 }
@@ -161,7 +174,7 @@ void ThreadSync::detSignal(bool stop)
         current_thread->syncGo = true;
         current_thread->syncCount++;
     }
-    detCond.notify_all();
+    NATIVECALL(detCond.notify_all());
 
     if (stop)
         current_thread->syncEnabled = false;
@@ -174,7 +187,7 @@ void ThreadSync::detSignalGlobal(int i)
         std::lock_guard<std::mutex> lock(detMutex);
         syncGo[i] = true;
     }
-    detCond.notify_all();
+    NATIVECALL(detCond.notify_all());
 }
 
 }

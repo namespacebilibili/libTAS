@@ -166,6 +166,7 @@ void Config::save(const std::string& gamepath) {
     settings.setValue("opengl_performance", sc.opengl_performance);
     settings.setValue("async_events", sc.async_events);
     settings.setValue("wait_timeout", sc.wait_timeout);
+    settings.setValue("sleep_handling", sc.sleep_handling);
     settings.setValue("game_specific_timing", sc.game_specific_timing);
     settings.setValue("game_specific_sync", sc.game_specific_sync);
     settings.setValue("variable_framerate", sc.variable_framerate);
@@ -180,6 +181,18 @@ void Config::save(const std::string& gamepath) {
     settings.setValue("savestate_settings", sc.savestate_settings);
 
     settings.endGroup();
+}
+
+void Config::saveDefaultFfmpeg(const std::string& gamepath) {
+    /* Save only if game file exists */
+    if (access(gamepath.c_str(), F_OK) != 0)
+        return;
+
+    /* Open the general preferences */
+    QSettings general_settings(QString("%1/libTAS.ini").arg(configdir.c_str()), QSettings::IniFormat);
+    general_settings.setFallbacksEnabled(false);
+
+    general_settings.setValue("ffmpegoptions", ffmpegoptions.c_str());
 }
 
 void Config::load(const std::string& gamepath) {
@@ -203,6 +216,8 @@ void Config::load(const std::string& gamepath) {
 #elif defined(__APPLE__) && defined(__MACH__)
     debugger = DEBUGGER_LLDB;
 #endif
+
+    ffmpegoptions = general_settings.value("ffmpegoptions", ffmpegoptions.c_str()).toString().toStdString();
 
     if (gamepath.empty())
         return;
@@ -305,6 +320,7 @@ void Config::load(const std::string& gamepath) {
     sc.virtual_steam = settings.value("virtual_steam", sc.virtual_steam).toBool();
     sc.async_events = settings.value("async_events", sc.async_events).toInt();
     sc.wait_timeout = settings.value("wait_timeout", sc.wait_timeout).toInt();
+    sc.sleep_handling = settings.value("sleep_handling", sc.sleep_handling).toInt();
     sc.game_specific_timing = settings.value("game_specific_timing", sc.game_specific_timing).toInt();
     sc.game_specific_sync = settings.value("game_specific_sync", sc.game_specific_sync).toInt();
     sc.variable_framerate = settings.value("variable_framerate", sc.variable_framerate).toBool();

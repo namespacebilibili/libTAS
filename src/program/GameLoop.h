@@ -22,17 +22,21 @@
 
 #include <QtCore/QObject>
 
-#include "Context.h"
 #include "movie/MovieFile.h"
+#include "../shared/GameInfo.h"
 
 /* Forward declaration */
 class GameEvents;
+struct Context;
 
 class GameLoop : public QObject {
     Q_OBJECT
 public:
     GameLoop(Context *c);
     void start();
+
+    void killForkProcess();
+
     MovieFile movie;
 
     /* Handle hotkeys */
@@ -47,6 +51,12 @@ private:
     /* Inputs from the previous frame */
     AllInputs prev_ai;
 
+    /* Current encoding segment. Sent when game is restarted */
+    int encoding_segment = 0;
+
+    /* PID of the forked `sh` process which executes the game */
+    pid_t fork_pid;
+
     void init();
 
     void initProcessMessages();
@@ -60,10 +70,10 @@ private:
     void endFrameMessages(AllInputs &ai);
 
     void loopExit();
-
+    
 signals:
     void uiChanged();
-    void statusChanged();
+    void statusChanged(int status);
     void configChanged();
     void alertToShow(QString str);
     void sharedConfigChanged();

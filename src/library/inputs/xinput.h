@@ -20,7 +20,7 @@
 #ifndef LIBTAS_XINPUT_H_INCL
 #define LIBTAS_XINPUT_H_INCL
 
-#include "../global.h"
+#include "../hook.h"
 #include "../../external/X11/XInput2.h"
 
 namespace libtas {
@@ -29,6 +29,7 @@ extern int xinput_opcode;
 
 OVERRIDE int XISelectEvents(Display* dpy, Window win, XIEventMask *masks, int num_masks);
 OVERRIDE XIDeviceInfo* XIQueryDevice(Display* dpy, int deviceid, int* ndevices_return);
+OVERRIDE void XIFreeDeviceInfo( XIDeviceInfo *info);
 
 }
 

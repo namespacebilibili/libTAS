@@ -26,6 +26,8 @@
 #include "frame.h"
 #include "xlib/xwindows.h" // x11::gameXWindows
 #include "GameHacks.h"
+#include "global.h"
+#include "GlobalState.h"
 
 #define GL_GLEXT_PROTOTYPES
 #include <GL/gl.h>
@@ -198,7 +200,7 @@ void checkMesa()
     debuglogstdio(LCF_OGL | LCF_INFO, "OpenGL renderer: %s", renderer);
 
     /* Check that we are using llvm driver */
-    if (shared_config.opengl_soft && (strstr(renderer, "llvmpipe") == nullptr)) {
+    if (Global::shared_config.opengl_soft && (strstr(renderer, "llvmpipe") == nullptr)) {
         /* Alert the user that software rendering is not enabled */
         std::string alertMsg = "Software rendering was enabled, but the OpenGL renderer currently used (";
         alertMsg += renderer;
@@ -406,11 +408,11 @@ Bool glXMakeCurrent( Display *dpy, GLXDrawable drawable, GLXContext ctx )
 
     if (drawable && (!x11::gameXWindows.empty())) {
 
-        game_info.video |= GameInfo::OPENGL;
-        game_info.tosend = true;
+        Global::game_info.video |= GameInfo::OPENGL;
+        Global::game_info.tosend = true;
 
         /* If we are using SDL, we let the higher function initialize stuff */
-        if (!(game_info.video & (GameInfo::SDL1 | GameInfo::SDL2 | GameInfo::SDL2_RENDERER | GameInfo::VDPAU))) {
+        if (!(Global::game_info.video & (GameInfo::SDL1 | GameInfo::SDL2 | GameInfo::SDL2_RENDERER | GameInfo::VDPAU))) {
             /* Now that the context is created, we can init the screen capture */
             ScreenCapture::init();
         }
@@ -438,11 +440,11 @@ Bool glXMakeContextCurrent( Display *dpy, GLXDrawable draw, GLXDrawable read, GL
 
     if (draw && (!x11::gameXWindows.empty())) {
 
-        game_info.video |= GameInfo::OPENGL;
-        game_info.tosend = true;
+        Global::game_info.video |= GameInfo::OPENGL;
+        Global::game_info.tosend = true;
 
         /* If we are using SDL, we let the higher function initialize stuff */
-        if (!(game_info.video & (GameInfo::SDL1 | GameInfo::SDL2 | GameInfo::SDL2_RENDERER | GameInfo::VDPAU))) {
+        if (!(Global::game_info.video & (GameInfo::SDL1 | GameInfo::SDL2 | GameInfo::SDL2_RENDERER | GameInfo::VDPAU))) {
             /* Now that the context is created, we can init the screen capture */
             ScreenCapture::init();
         }
@@ -463,12 +465,8 @@ void glXSwapBuffers( Display *dpy, XID drawable )
     DEBUGLOGCALL(LCF_WINDOW | LCF_OGL);
 
     /* Start the frame boundary and pass the function to draw */
-#ifdef LIBTAS_ENABLE_HUD
     static RenderHUD_GL renderHUD;
     frameBoundary([&] () {orig::glXSwapBuffers(dpy, drawable);}, renderHUD);
-#else
-    frameBoundary([&] () {orig::glXSwapBuffers(dpy, drawable);});
-#endif
 }
 
 static int swapInterval = 0;
@@ -481,7 +479,7 @@ void glXSwapIntervalEXT (Display *dpy, GLXDrawable drawable, int interval)
     swapInterval = interval;
 
     /* When using non deterministic timer, we let the game set vsync */
-    if (shared_config.debug_state & SharedConfig::DEBUG_UNCONTROLLED_TIME) {
+    if (Global::shared_config.debug_state & SharedConfig::DEBUG_UNCONTROLLED_TIME) {
         orig::glXSwapIntervalEXT(dpy, drawable, interval);
     }
     else {
@@ -498,7 +496,7 @@ int glXSwapIntervalSGI (int interval)
     swapInterval = interval;
 
     /* When using non deterministic timer, we let the game set vsync */
-    if (shared_config.debug_state & SharedConfig::DEBUG_UNCONTROLLED_TIME) {
+    if (Global::shared_config.debug_state & SharedConfig::DEBUG_UNCONTROLLED_TIME) {
         return orig::glXSwapIntervalSGI(interval);
     }
 
@@ -513,7 +511,7 @@ int glXSwapIntervalSGI (int interval)
      * We can noop this call when using software renderer, which fix the issue
      * and will probably not alter much the behaviour of games. 
      */
-    if (shared_config.opengl_soft) {
+    if (Global::shared_config.opengl_soft) {
         return 0;
     }
 
@@ -530,7 +528,7 @@ int glXSwapIntervalMESA (unsigned int interval)
     swapInterval = interval;
 
     /* When using non deterministic timer, we let the game set vsync */
-    if (shared_config.debug_state & SharedConfig::DEBUG_UNCONTROLLED_TIME) {
+    if (Global::shared_config.debug_state & SharedConfig::DEBUG_UNCONTROLLED_TIME) {
         return orig::glXSwapIntervalMESA(interval);
     }
     else {
@@ -589,25 +587,25 @@ GLXContext glXCreateContextAttribsARB (Display *dpy, GLXFBConfig config, GLXCont
     int i = 0;
     while (attrib_list[i] != 0) {
         if (attrib_list[i] == GLX_CONTEXT_MAJOR_VERSION_ARB) {
-            game_info.opengl_major = attrib_list[i+1];
-            game_info.tosend = true;
+            Global::game_info.opengl_major = attrib_list[i+1];
+            Global::game_info.tosend = true;
         }
         if (attrib_list[i] == GLX_CONTEXT_MINOR_VERSION_ARB) {
-            game_info.opengl_minor = attrib_list[i+1];
-            game_info.tosend = true;
+            Global::game_info.opengl_minor = attrib_list[i+1];
+            Global::game_info.tosend = true;
         }
         if (attrib_list[i] == GLX_CONTEXT_PROFILE_MASK_ARB) {
             switch(attrib_list[i+1]) {
             case GLX_CONTEXT_CORE_PROFILE_BIT_ARB:
-                game_info.opengl_profile = GameInfo::CORE;
+                Global::game_info.opengl_profile = GameInfo::CORE;
                 break;
             case GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB:
-                game_info.opengl_profile = GameInfo::COMPATIBILITY;
+                Global::game_info.opengl_profile = GameInfo::COMPATIBILITY;
                 break;
             default:
                 break;
             }
-            game_info.tosend = true;
+            Global::game_info.tosend = true;
         }
 
         i += 2;

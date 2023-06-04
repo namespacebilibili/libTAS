@@ -25,4 +25,6 @@
 
 unsigned int convertQtModifiers(Qt::KeyboardModifiers flags);
 
+bool isLightTheme();
+
 #endif

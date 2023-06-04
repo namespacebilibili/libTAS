@@ -26,7 +26,8 @@
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QSpinBox>
 
-#include "../Context.h"
+/* Forward declaration */
+struct Context;
 
 class EncodeWindow : public QDialog {
     Q_OBJECT
@@ -53,6 +54,7 @@ private slots:
     void slotBrowseEncodePath();
     void slotUpdate();
     void slotOk();
+    void slotDefault();
 };
 
 #endif

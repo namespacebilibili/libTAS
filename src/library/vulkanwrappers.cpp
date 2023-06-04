@@ -23,6 +23,8 @@
 #include "renderhud/RenderHUD.h"
 #include "ScreenCapture.h"
 #include "frame.h"
+#include "global.h"
+#include "GlobalState.h"
 
 #include <string.h>
 
@@ -192,8 +194,8 @@ VkResult myvkCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateI
         vk::device = *pDevice;
 
         /* We are officially using Vulkan now. Initialize screen capture */
-        game_info.video |= GameInfo::VULKAN;
-        game_info.tosend = true;
+        Global::game_info.video |= GameInfo::VULKAN;
+        Global::game_info.tosend = true;
 
         ScreenCapture::fini();
         ScreenCapture::init();
@@ -301,7 +303,6 @@ VkResult vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo)
     orig::vkGetSwapchainImagesKHR(vk::device, vk::swapchain, &count, vk::swapchainImgs.data());
 
     /* Start the frame boundary and pass the function to draw */
-#ifdef LIBTAS_ENABLE_HUD
     static RenderHUD renderHUD;
     frameBoundary([&] () {
         static bool first = true;
@@ -325,9 +326,6 @@ VkResult vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo)
             orig::vkQueuePresentKHR(queue, &pi);
         }
     }, renderHUD);
-#else
-    frameBoundary([&] () {orig::vkQueuePresentKHR(queue, pPresentInfo);});
-#endif
 
     return VK_SUCCESS;
 }

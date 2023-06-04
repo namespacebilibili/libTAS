@@ -30,12 +30,14 @@
 #include "GameEventsQuartz.h"
 #endif
 
+#include "Context.h"
 #include "utils.h"
 #include "AutoSave.h"
 // #include "SaveState.h"
 #include "SaveStateList.h"
 #include "lua/Input.h"
-#include "lua/Main.h"
+#include "lua/Callbacks.h"
+#include "lua/NamedLuaFunction.h"
 #include "ramsearch/MemAccess.h"
 
 #include "../shared/sockethelpers.h"
@@ -53,6 +55,7 @@
 #include <sys/wait.h> // waitpid
 // #include <X11/X.h>
 #include <stdint.h>
+#include <cstdlib>
 
 GameLoop::GameLoop(Context* c) : movie(MovieFile(c)), context(c)
 {
@@ -68,7 +71,7 @@ void GameLoop::start()
     init();
     initProcessMessages();
 
-    Lua::Main::callLua(context, "onStartup");
+    Lua::Callbacks::call(Lua::NamedLuaFunction::CallbackStartup);
 
     while (1)
     {
@@ -86,8 +89,8 @@ void GameLoop::start()
         if (context->game_window ) do {
 
             /* Check if game is still running */
-            int ret = waitpid(context->fork_pid, nullptr, WNOHANG);
-            if (ret == context->fork_pid) {
+            int ret = waitpid(fork_pid, nullptr, WNOHANG);
+            if (ret == fork_pid) {
                 emit alertToShow(QString("Game was closed"));
                 loopExit();
                 return;
@@ -138,12 +141,13 @@ void GameLoop::start()
             }
         }
 
-        Lua::Main::callLua(context, "onFrame");
+        Lua::Callbacks::call(Lua::NamedLuaFunction::CallbackFrame);
 
         endFrameMessages(ai);
 
         if (shouldQuit) {
             context->status = Context::QUITTING;
+            emit statusChanged(Context::QUITTING);
         }
     }
 }
@@ -157,7 +161,7 @@ void GameLoop::init()
     context->game_window = 0;
 
     /* Reset savestate flag */
-    context->didASavestate = false;
+    gameEvents->didASavestate = false;
 
     /* Reset the frame count if not restarting */
     if (context->status != Context::RESTARTING)
@@ -169,7 +173,7 @@ void GameLoop::init()
 
     /* Reset the encoding segment if not restarting */
     if (context->status != Context::RESTARTING)
-        context->encoding_segment = 0;
+        encoding_segment = 0;
 
     /* Extract the game executable name from the game executable path */
     context->gamename = fileFromPath(context->gamepath);
@@ -189,8 +193,8 @@ void GameLoop::init()
     SaveStateList::init(context);
 
     /* We fork here so that the child process calls the game */
-    context->fork_pid = fork();
-    if (context->fork_pid == 0) {
+    fork_pid = fork();
+    if (fork_pid == 0) {
         GameThread::launch(context);
     }
 
@@ -225,7 +229,7 @@ void GameLoop::init()
             }
 
             /* Check md5 match */
-            if ((!context->md5_movie.empty()) && (context->md5_game.compare(context->md5_movie) != 0))
+            if ((!movie.header->md5_movie.empty()) && (context->md5_game.compare(movie.header->md5_movie) != 0))
                 emit alertToShow(QString("Game executable hash does not match with the hash stored in the movie!"));
 
         }
@@ -263,13 +267,13 @@ void GameLoop::init()
         (context->config.auto_restart);
 
     context->status = Context::ACTIVE;
-    emit statusChanged();
+    emit statusChanged(context->status);
 }
 
 void GameLoop::initProcessMessages()
 {
     /* Connect to the socket between the program and the game */
-    bool inited = initSocketProgram(context->fork_pid);
+    bool inited = initSocketProgram(fork_pid);
     if (!inited) {
         loopExit();
         return;
@@ -369,7 +373,7 @@ void GameLoop::initProcessMessages()
     }
 
     sendMessage(MSGN_ENCODING_SEGMENT);
-    sendData(&context->encoding_segment, sizeof(int));
+    sendData(&encoding_segment, sizeof(int));
 
     /* End message */
     sendMessage(MSGN_END_INIT);
@@ -383,6 +387,8 @@ bool GameLoop::startFrameMessages()
     int message = receiveMessage();
 
     while (message != MSGB_START_FRAMEBOUNDARY) {
+        GameInfo game_info;
+
         switch (message) {
         case MSGB_WINDOW_ID:
         {
@@ -419,32 +425,32 @@ bool GameLoop::startFrameMessages()
 
                 if (!notTruncInputs || (context->framecount > context->config.sc.movie_framecount)) {
                     context->config.sc.movie_framecount = context->framecount;
-                    context->movie_time_sec = context->current_time_sec - context->config.sc.initial_monotonic_time_sec;
-                    context->movie_time_nsec = context->current_time_nsec - context->config.sc.initial_monotonic_time_nsec;
-                    if (context->movie_time_nsec < 0) {
-                        context->movie_time_nsec += 1000000000;
-                        context->movie_time_sec--;
+                    movie.header->length_sec = context->current_time_sec - context->config.sc.initial_monotonic_time_sec;
+                    movie.header->length_nsec = context->current_time_nsec - context->config.sc.initial_monotonic_time_nsec;
+                    if (movie.header->length_nsec < 0) {
+                        movie.header->length_nsec += 1000000000;
+                        movie.header->length_sec--;
                     }
                 }
             }
             break;
         case MSGB_GAMEINFO:
-            receiveData(&context->game_info, sizeof(context->game_info));
-            emit gameInfoChanged(context->game_info);
+            receiveData(&game_info, sizeof(game_info));
+            emit gameInfoChanged(game_info);
             break;
         case MSGB_FPS:
             receiveData(&context->fps, sizeof(float));
             receiveData(&context->lfps, sizeof(float));
             break;
         case MSGB_ENCODING_SEGMENT:
-            receiveData(&context->encoding_segment, sizeof(int));
+            receiveData(&encoding_segment, sizeof(int));
             break;
         case MSGB_INVALIDATE_SAVESTATES:
             /* Only save a backtrack savestate if we did at least one savestate.
              * This prevent incremental savestating from being inefficient if a
              * backtrack savestate is performed at the very beginning of the game.
              */
-            if ((context->config.sc.savestate_settings & SharedConfig::SS_BACKTRACK) && context->didASavestate)
+            if ((context->config.sc.savestate_settings & SharedConfig::SS_BACKTRACK) && gameEvents->didASavestate)
                 context->hotkey_pressed_queue.push(HOTKEY_SAVESTATE_BACKTRACK);
 
             /* Invalidate all savestates */
@@ -467,6 +473,25 @@ bool GameLoop::startFrameMessages()
             context->draw_frame = false;
             break;
 
+        case MSGB_SYMBOL_ADDRESS: {
+            std::string sym = receiveString();
+            
+            std::ostringstream cmd;
+            cmd << "readelf -Ws " << context->gamepath << " | grep " << sym << " | awk '{print $2}'";
+
+            FILE *addrstr = popen(cmd.str().c_str(), "r");
+            uint64_t addr = 0;
+            if (addrstr != NULL) {
+                std::array<char,17> buf;
+                if (fgets(buf.data(), buf.size(), addrstr) != nullptr) {
+                    addr = std::strtoull(buf.data(), nullptr, 16);
+                    std::cerr << "Asked for symbol " << sym << ", returns " << addr << std::endl;
+                }
+                pclose(addrstr);
+            }
+            sendData(&addr, sizeof(uint64_t));
+            break;
+        }
         case MSGB_QUIT:
             if (!context->interactive) {
                 /* Exit the program when game has exit */
@@ -502,7 +527,7 @@ bool GameLoop::startFrameMessages()
     }
 
     /* Execute the lua callback onPaint here */
-    Lua::Main::callLua(context, "onPaint");
+    Lua::Callbacks::call(Lua::NamedLuaFunction::CallbackPaint);
 
     sendMessage(MSGN_START_FRAMEBOUNDARY);
 
@@ -517,7 +542,6 @@ void GameLoop::sleepSendPreview()
 
     /* Send a preview of inputs so that the game can display them
      * on the HUD */
-#ifdef LIBTAS_ENABLE_HUD
 
     /* Don't preview when reading inputs */
     if (context->config.sc.recording == SharedConfig::RECORDING_READ)
@@ -542,8 +566,6 @@ void GameLoop::sleepSendPreview()
         sendData(&preview_ai, sizeof(AllInputs));
         last_preview_ai = preview_ai;
     }
-
-#endif
 }
 
 
@@ -590,7 +612,7 @@ void GameLoop::processInputs(AllInputs &ai)
 
             /* Call lua onInput() here so that a script can modify inputs */
             Lua::Input::registerInputs(&ai);
-            Lua::Main::callLua(context, "onInput");
+            Lua::Callbacks::call(Lua::NamedLuaFunction::CallbackInput);
 
             if (context->config.sc.recording == SharedConfig::RECORDING_WRITE) {
                 /* If the input editor is visible, we should keep future inputs.
@@ -690,20 +712,20 @@ void GameLoop::processInputs(AllInputs &ai)
                     cur_sec = context->current_time_sec - context->config.sc.initial_monotonic_time_sec;
                     cur_nsec = context->current_time_nsec - context->config.sc.initial_monotonic_time_nsec;
   
-                    if ((context->movie_time_sec != -1) &&
-                        ((context->movie_time_sec != cur_sec) ||
-                        (context->movie_time_nsec != cur_nsec))) {
+                    if ((movie.header->length_sec != -1) &&
+                        ((movie.header->length_sec != cur_sec) ||
+                        (movie.header->length_nsec != cur_nsec))) {
 
-                        emit alertToShow(QString("Movie length mismatch. Metadata stores %1.%2 seconds but end time is %3.%4 seconds.").arg(context->movie_time_sec).arg(context->movie_time_nsec, 9, 10, QChar('0')).arg(cur_sec).arg(cur_nsec, 9, 10, QChar('0')));
+                        emit alertToShow(QString("Movie length mismatch. Metadata stores %1.%2 seconds but end time is %3.%4 seconds.").arg(movie.header->length_sec).arg(movie.header->length_nsec, 9, 10, QChar('0')).arg(cur_sec).arg(cur_nsec, 9, 10, QChar('0')));
                     }
-                    context->movie_time_sec = cur_sec;
-                    context->movie_time_nsec = cur_nsec;
+                    movie.header->length_sec = cur_sec;
+                    movie.header->length_nsec = cur_nsec;
                 }
             }
 
             /* Call lua onInput() here so that a script can modify inputs */
             Lua::Input::registerInputs(&ai);
-            Lua::Main::callLua(context, "onInput");
+            Lua::Callbacks::call(Lua::NamedLuaFunction::CallbackInput);
 
             /* Update controller inputs if controller window is shown */
             emit showControllerInputs(ai);
@@ -785,7 +807,7 @@ void GameLoop::loopExit()
         wait(nullptr);
 
         context->status = Context::RESTARTING;
-        emit statusChanged();
+        emit statusChanged(context->status);
 
         return;
     }
@@ -825,5 +847,10 @@ void GameLoop::loopExit()
     wait(nullptr);
 
     context->status = Context::INACTIVE;
-    emit statusChanged();
+    emit statusChanged(Context::INACTIVE);
+}
+
+void GameLoop::killForkProcess()
+{
+    kill(fork_pid, SIGKILL);
 }

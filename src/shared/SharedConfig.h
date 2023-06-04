@@ -81,11 +81,12 @@ struct __attribute__((packed, aligned(8))) SharedConfig {
         OSD_INPUTS = 0x02,
         OSD_MESSAGES = 0x04,
         OSD_RAMWATCHES = 0x08,
-        OSD_LUA = 0x10
+        OSD_LUA = 0x10,
+        OSD_CROSSHAIR = 0x20,
     };
 
     /* Elements to be displayed on the OSD */
-    int osd = OSD_FRAMECOUNT | OSD_INPUTS | OSD_MESSAGES | OSD_RAMWATCHES | OSD_LUA;
+    int osd = OSD_FRAMECOUNT | OSD_INPUTS | OSD_MESSAGES | OSD_RAMWATCHES | OSD_LUA | OSD_CROSSHAIR;
 
     /* OSD text location */
     enum OSDLocation {
@@ -230,6 +231,17 @@ struct __attribute__((packed, aligned(8))) SharedConfig {
 
     /* How are we handling waits */
     int wait_timeout = WAIT_NATIVE;
+
+    /* An enum indicating how do we handle sleeps */
+    enum SleepType
+    {
+        SLEEP_NEVER,
+        SLEEP_MAIN,
+        SLEEP_ALWAYS,
+    };
+    
+    /* How are we handling sleeps */
+    int sleep_handling = SLEEP_MAIN;
 
     /* An enum indicating enabled game-specific timing settings */
     enum GameSpecificTiming

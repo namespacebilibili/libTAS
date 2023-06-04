@@ -25,6 +25,7 @@
 #include "GameThread.h"
 #include "utils.h"
 #include "../shared/SharedConfig.h"
+#include "Context.h"
 
 #include <string>
 #include <sstream>
@@ -352,6 +353,7 @@ void GameThread::launch(Context *context)
             close(fd);
             break;
         case SharedConfig::LOGGING_TO_FILE:
+            std::cout << "Logging to file: " << logfile << std::endl;
             fd = open(logfile.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
             dup2(fd, 2);
             close(fd);

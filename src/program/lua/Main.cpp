@@ -22,6 +22,9 @@
 #include "Input.h"
 #include "Movie.h"
 #include "Memory.h"
+#include "Print.h"
+#include "Callbacks.h"
+
 #include <iostream>
 extern "C" {
 #include <lua.h>
@@ -29,60 +32,101 @@ extern "C" {
 #include <lauxlib.h>
 }
 
+/* Lua state */
+static lua_State *lua_state = nullptr;
+
 void Lua::Main::init(Context* context)
 {
-    if (context->lua_state)
-        lua_close(context->lua_state);
+    if (lua_state)
+        lua_close(lua_state);
     
-    context->lua_state = luaL_newstate();
-    luaL_openlibs(context->lua_state);
+    lua_state = luaL_newstate();
+    luaL_openlibs(lua_state);
     
     /* Register our functions */
-    Lua::Gui::registerFunctions(context);
-    Lua::Input::registerFunctions(context);
-    Lua::Memory::registerFunctions(context);
-    Lua::Movie::registerFunctions(context);
+    Lua::Gui::registerFunctions(lua_state);
+    Lua::Input::registerFunctions(lua_state);
+    Lua::Memory::registerFunctions(lua_state);
+    Lua::Movie::registerFunctions(lua_state, context);
+    Lua::Callbacks::registerFunctions(lua_state);
+    Lua::Print::init(lua_state);
 }
 
-void Lua::Main::exit(Context* context)
+void Lua::Main::exit()
 {
-    if (context->lua_state)
-        lua_close(context->lua_state);
-    context->lua_state = nullptr;
+    Lua::Callbacks::clear();
+    
+    if (lua_state)
+        lua_close(lua_state);
+    lua_state = nullptr;
 }
 
-void Lua::Main::run(Context* context, std::string filename)
+std::string luaFile;
+
+void Lua::Main::run(std::string filename)
 {
-    int status = luaL_dofile(context->lua_state, filename.c_str());
+    luaFile = filename;
+    int status = luaL_dofile(lua_state, filename.c_str());
     if (status != 0) {
         std::cerr << "Error " << status << " loading lua script " << filename << std::endl;
-        std::cerr << lua_tostring(context->lua_state, -1) << std::endl;
+        std::cerr << lua_tostring(lua_state, -1) << std::endl;
     }
     else {
         std::cout << "Loaded script " << filename << std::endl;        
     }
+    
+    /* Push old-style callback methods into new-style */
+    lua_getglobal(lua_state, "onStartup");
+    if (lua_isfunction(lua_state, -1))
+        Lua::Callbacks::onStartup(lua_state);
+    else
+        lua_pop(lua_state, 1);
+
+    lua_getglobal(lua_state, "onInput");
+    if (lua_isfunction(lua_state, -1))
+        Lua::Callbacks::onInput(lua_state);
+    else
+        lua_pop(lua_state, 1);
+
+    lua_getglobal(lua_state, "onFrame");
+    if (lua_isfunction(lua_state, -1))
+        Lua::Callbacks::onFrame(lua_state);
+    else
+        lua_pop(lua_state, 1);
+
+    lua_getglobal(lua_state, "onPaint");
+    if (lua_isfunction(lua_state, -1))
+        Lua::Callbacks::onPaint(lua_state);
+    else
+        lua_pop(lua_state, 1);
+
+}
+
+const std::string& Lua::Main::currentFile()
+{
+    return luaFile;
 }
 
 void Lua::Main::reset(Context* context)
 {
-    exit(context);
+    exit();
     init(context);
 }
 
-void Lua::Main::callLua(Context* context, const char* func)
+void Lua::Main::callLua(const char* func)
 {
-    if (!context->lua_state) return;
+    if (!lua_state) return;
     
-    lua_getglobal(context->lua_state, func);
-    if (lua_isfunction(context->lua_state, -1)) {
-        int ret = lua_pcall(context->lua_state, 0, 0, 0);
+    lua_getglobal(lua_state, func);
+    if (lua_isfunction(lua_state, -1)) {
+        int ret = lua_pcall(lua_state, 0, 0, 0);
         if (ret != 0) {
-            std::cerr << "error running function "<< func << "(): " << lua_tostring(context->lua_state, -1) << std::endl;
-            lua_pop(context->lua_state, 1);  // pop error message from the stack
+            std::cerr << "error running function "<< func << "(): " << lua_tostring(lua_state, -1) << std::endl;
+            lua_pop(lua_state, 1);  // pop error message from the stack
         }
     }
     else {
         /* No function, we need to clear the stack */
-        lua_pop(context->lua_state, 1);
+        lua_pop(lua_state, 1);
     }
 }

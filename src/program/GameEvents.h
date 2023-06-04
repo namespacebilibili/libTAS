@@ -24,11 +24,11 @@
 // #include <memory>
 #include <stdint.h>
 
-#include "Context.h"
 #include "KeyMapping.h"
 
 /* Forward declaration */
 class MovieFile;
+struct Context;
 
 class GameEvents : public QObject {
     Q_OBJECT
@@ -54,6 +54,9 @@ public:
      * window has focus and our settings.
      */
     virtual bool haveFocus() = 0;
+
+    /* Indicate if at least one savestate was performed, for backtrack savestate */
+    bool didASavestate = false;
 
 protected:
     Context* context;

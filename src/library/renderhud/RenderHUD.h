@@ -20,7 +20,6 @@
 #ifdef __unix__
 #include "config.h"
 #endif
-#ifdef LIBTAS_ENABLE_HUD
 
 #ifndef LIBTAS_RENDERHUD_H_INCL
 #define LIBTAS_RENDERHUD_H_INCL
@@ -161,6 +160,9 @@ class RenderHUD
         /* Display lua drawings */
         void drawLua();
 
+        /* Display crosshair on current pointer position */
+        void drawCrosshair(const AllInputs& ai);
+
         /* Location offsets when displaying multiple texts on the same location */
         int offsets[9];
 
@@ -233,5 +235,4 @@ class RenderHUD
 };
 }
 
-#endif
 #endif

@@ -20,6 +20,8 @@
 #include "dlhook.h"
 #include "logging.h"
 #include "hook.h"
+#include "global.h"
+#include "GlobalState.h"
 #ifdef __unix__
 #include "wine/winehook.h"
 #include "wine/wined3d.h"

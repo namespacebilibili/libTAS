@@ -47,6 +47,7 @@
 
 #include <thread>
 
+class SettingsWindow;
 class EncodeWindow;
 class InputWindow;
 class ExecutableWindow;
@@ -60,7 +61,7 @@ class OsdWindow;
 class AnnotationsWindow;
 class AutoSaveWindow;
 class TimeTraceWindow;
-class CustomResolutionDialog;
+class LuaConsoleWindow;
 
 class MainWindow : public QMainWindow
 {
@@ -77,6 +78,7 @@ public:
     GameLoop *gameLoop;
     Context *context;
 
+    SettingsWindow* settingsWindow;
     EncodeWindow* encodeWindow;
     InputWindow* inputWindow;
     ExecutableWindow* executableWindow;
@@ -90,7 +92,7 @@ public:
     AnnotationsWindow* annotationsWindow;
     AutoSaveWindow* autoSaveWindow;
     TimeTraceWindow* timeTraceWindow;
-    CustomResolutionDialog* customResolutionDialog;
+    LuaConsoleWindow* luaConsoleWindow;
 
     QList<QWidget*> disabledWidgetsOnStart;
     QList<QAction*> disabledActionsOnStart;
@@ -101,39 +103,11 @@ public:
 
     QAction *autoRestartAction;
     QAction *variableFramerateAction;
-    QActionGroup *movieEndGroup;
-    QActionGroup *screenResGroup;
 
     QAction *renderSoftAction;
     QAction *renderPerfAction;
-    QActionGroup *osdGroup;
-    QAction *osdEncodeAction;
-
-    QActionGroup *frequencyGroup;
-    QActionGroup *bitDepthGroup;
-    QActionGroup *channelGroup;
-    QAction *muteAction;
-    QAction *disableAction;
-
-    QActionGroup *localeGroup;
-
-    QActionGroup *timeMainGroup;
-    QActionGroup *timeSecGroup;
 
     QAction *busyloopAction;
-    QAction *preventSavefileAction;
-    QAction *recycleThreadsAction;
-
-    QActionGroup *savestateGroup;
-    QAction *steamAction;
-    QActionGroup *waitGroup;
-    QActionGroup *asyncGroup;
-
-    QActionGroup *debugStateGroup;
-    QAction *sigintAction;
-    QActionGroup *loggingOutputGroup;
-    QActionGroup *loggingPrintGroup;
-    QActionGroup *loggingExcludeGroup;
 
     QAction *configEncodeAction;
     QAction *toggleEncodeAction;
@@ -142,12 +116,7 @@ public:
     QActionGroup *fastforwardGroup;
     QActionGroup *fastforwardRenderGroup;
 
-    QAction *mouseAction;
     QAction *mouseModeAction;
-    QAction *mouseWarpAction;
-    QAction *mouseGameWarpAction;
-    QActionGroup *joystickGroup;
-
 
     QComboBox *gamePath;
     QPushButton *browseGamePath;
@@ -228,7 +197,7 @@ private slots:
      * the game status (running/stopped), to prevent modifying values that
      * are not supposed to be modified when the game is running.
      */
-    void updateStatus();
+    void updateStatus(int status);
 
     /* Update UI elements that are often modified, triggered by a timer */
     void updateUIFrequent();
@@ -265,9 +234,6 @@ private slots:
     void slotMovieEnable(bool checked);
     void slotMovieRecording();
     void slotToggleEncode();
-    void slotMuteSound(bool checked);
-    void slotRenderSoft(bool checked);
-    void slotScreenRes();
     void slotPauseMovie();
     void slotVariableFramerate(bool checked);
     void slotLuaExecute();

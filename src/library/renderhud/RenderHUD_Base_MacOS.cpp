@@ -18,14 +18,13 @@
  */
 
 #include "RenderHUD_Base_MacOS.h"
-#ifdef LIBTAS_ENABLE_HUD
 
 #include "../logging.h"
 #include "../hook.h"
 #include <CoreText/CoreText.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreGraphics/CoreGraphics.h>
-//#include "../global.h" // shared_config
+//#include "../global.h" // Global::shared_config
 #include "../ScreenCapture.h"
 
 namespace libtas {
@@ -44,7 +43,7 @@ void RenderHUD_Base_MacOS::initFonts()
     font = CTFontCreateWithName(CFSTR("Times"), font_size, NULL);
     if (!font) {
         debuglogstdio(LCF_WINDOW | LCF_ERROR, "CTFontCreateWithName failed");
-        shared_config.osd = 0;
+        Global::shared_config.osd = 0;
     }
 }
 
@@ -127,5 +126,3 @@ void RenderHUD_Base_MacOS::renderText(const char* text, Color fg_color, Color bg
 }
 
 }
-
-#endif

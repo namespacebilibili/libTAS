@@ -21,6 +21,7 @@
 #include "../../checkpoint/ThreadManager.h" // getThreadId()
 #include "../../logging.h"
 #include "../../hook.h"
+#include "../../global.h"
 #include "../AudioContext.h"
 #include "../AudioSource.h"
 #include "../AudioBuffer.h"
@@ -106,7 +107,7 @@ char * SDL_AudioDriverName(char *namebuf, int maxlen)
 /* Helper function for SDL_OpenAudio() and SDL_OpenAudioDevice() */
 static int open_audio_device(const SDL_AudioSpec * desired, SDL_AudioSpec * obtained, int min_id)
 {
-    if (shared_config.audio_disabled)
+    if (Global::shared_config.audio_disabled)
         return -1;
 
     /* Look for the next available device. Id 1 is reserved for SDL_OpenAudio() device */
@@ -263,6 +264,54 @@ static int open_audio_device(const SDL_AudioSpec * desired, SDL_AudioSpec * obta
     if (index == 0)
         return dummySDLDevice;
     return NULL;
+}
+
+/* Override */ int SDL_GetAudioDeviceSpec(int index, int iscapture, SDL_AudioSpec *spec)
+{
+    DEBUGLOGCALL(LCF_SDL | LCF_SOUND);
+    if (iscapture != 0)
+        return -1;
+    if (!spec)
+        return -1;    
+    if (index != 0)
+        return -1;
+
+    spec->freq = Global::shared_config.audio_frequency;
+    switch (Global::shared_config.audio_bitdepth) {
+        case 8:
+            spec->format = AUDIO_U8;
+            break;
+        case 16:
+            spec->format = AUDIO_S16LSB;
+            break;
+    }
+    spec->channels = Global::shared_config.audio_channels;
+
+    return 0;
+}
+
+/* Override */ int SDL_GetDefaultAudioInfo(char **name, SDL_AudioSpec *spec, int iscapture)
+{
+    DEBUGLOGCALL(LCF_SDL | LCF_SOUND);
+    if (iscapture != 0)
+        return -1;
+    if (!spec)
+        return -1;
+    if (name)
+        *name = nullptr;
+
+    spec->freq = Global::shared_config.audio_frequency;
+    switch (Global::shared_config.audio_bitdepth) {
+        case 8:
+            spec->format = AUDIO_U8;
+            break;
+        case 16:
+            spec->format = AUDIO_S16LSB;
+            break;
+    }
+    spec->channels = Global::shared_config.audio_channels;
+
+    return 0;
 }
 
 /* Override */ SDL_AudioDeviceID SDL_OpenAudioDevice(const char *device,

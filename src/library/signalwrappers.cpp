@@ -197,15 +197,46 @@ static thread_local int origUsrMaskThread = 0;
      */
     ThreadSync::wrapperExecutionLockLock();
 
+    /* Save the original handlers for signals that we will skip */
+    struct sigaction act_suspend, act_checkpoint;
+    act_suspend.sa_handler = SIG_DFL;
+    act_checkpoint.sa_handler = SIG_DFL;
+
+    if (sig == SaveStateManager::sigSuspend()) {
+        debuglogstdio(LCF_SIGNAL, "    Skipping because libTAS uses that signal for suspend");
+        
+        if (oact != nullptr)
+            *oact = act_suspend;
+
+        if (act != nullptr)
+            act_suspend = *act;
+            
+        ThreadSync::wrapperExecutionLockUnlock();
+        return 0;
+    }
+
+    if (sig == SaveStateManager::sigCheckpoint()) {
+        debuglogstdio(LCF_SIGNAL, "    Skipping because libTAS uses that signal for checkpoint");
+        
+        if (oact != nullptr)
+            *oact = act_checkpoint;
+
+        if (act != nullptr)
+            act_checkpoint = *act;
+            
+        ThreadSync::wrapperExecutionLockUnlock();
+        return 0;
+    }
+    
+    if (oact != nullptr) {
+        debuglogstdio(LCF_SIGNAL, "    Getting handler %p for signal %d (%s)", (oact->sa_flags & SA_SIGINFO)?
+            reinterpret_cast<void*>(oact->sa_sigaction):
+            reinterpret_cast<void*>(oact->sa_handler), sig, strsignal(sig));
+    }
     if (act != nullptr) {
         debuglogstdio(LCF_SIGNAL, "    Setting handler %p for signal %d (%s)", (act->sa_flags & SA_SIGINFO)?
                 reinterpret_cast<void*>(act->sa_sigaction):
                 reinterpret_cast<void*>(act->sa_handler), sig, strsignal(sig));
-    }
-    else if (oact != nullptr) {
-        debuglogstdio(LCF_SIGNAL, "    Getting handler %p for signal %d (%s)", (oact->sa_flags & SA_SIGINFO)?
-            reinterpret_cast<void*>(oact->sa_sigaction):
-            reinterpret_cast<void*>(oact->sa_handler), sig, strsignal(sig));
     }
 
     int ret = orig::sigaction(sig, act, oact);
@@ -316,7 +347,7 @@ static thread_local int origUsrMaskThread = 0;
     if (ret != -1) {
         if (oldmask) {
 #if defined(__APPLE__) && defined(__MACH__)
-            if (!is_inited) {
+            if (!Global::is_inited) {
                 if (origUsrMaskProcess & SaveStateManager::sigSuspend())
                     sigaddset(oldmask, SaveStateManager::sigSuspend());
                 if (origUsrMaskProcess & SaveStateManager::sigCheckpoint())
@@ -338,7 +369,7 @@ static thread_local int origUsrMaskThread = 0;
             if (sigismember(newmask, SaveStateManager::sigCheckpoint()) == 1) mask |= sigmask(SaveStateManager::sigCheckpoint());
 
 #if defined(__APPLE__) && defined(__MACH__)
-            if (!is_inited) {
+            if (!Global::is_inited) {
                 if (how == SIG_BLOCK)
                     origUsrMaskProcess |= mask;
                 if (how == SIG_UNBLOCK)

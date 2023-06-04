@@ -26,6 +26,7 @@
 #include "../../shared/AllInputs.h"
 #include <cstring>
 #include "../GlobalState.h"
+#include "../global.h"
 
 namespace libtas {
 
@@ -33,10 +34,34 @@ static int gcids[4] = {-1, -1, -1, -1};
 static int refids[4] = {0, 0, 0, 0}; // GC open/close is ref-counted
 static const char joy_name[] = "XInput Controller";
 
+/* We support game controllers being disconnected during gameplay */
+static bool attached[4] = {true, true, true, true}; // all controllers are attached
+                                                    // at startup
+
+bool mySDL_GameControllerIsAttached(int index)
+{
+    return attached[index];
+}
+
+void mySDL_GameControllerChangeAttached(int index)
+{
+    attached[index] = !attached[index];
+
+    if (!attached[index]) {
+        /* Disconnect connected joystick */
+        GlobalNoLog gnl;
+        if (SDL_GameControllerGetAttached(reinterpret_cast<SDL_GameController*>(&index)))
+        SDL_GameControllerClose(reinterpret_cast<SDL_GameController*>(&index));
+        
+        if (SDL_JoystickGetAttached(reinterpret_cast<SDL_Joystick*>(&index)))
+        SDL_JoystickClose(reinterpret_cast<SDL_Joystick*>(&index));
+    }
+}
+
 /* Override */ SDL_bool SDL_IsGameController(int joystick_index)
 {
     debuglogstdio(LCF_SDL | LCF_JOYSTICK, "%s call with id %d", __func__, joystick_index);
-    if (joystick_index >= 0 && joystick_index < shared_config.nb_controllers)
+    if (joystick_index >= 0 && joystick_index < Global::shared_config.nb_controllers)
         return SDL_TRUE;
     return SDL_FALSE;
 
@@ -45,7 +70,11 @@ static const char joy_name[] = "XInput Controller";
 /* Override */ SDL_GameController *SDL_GameControllerOpen(int joystick_index)
 {
     debuglogstdio(LCF_SDL | LCF_JOYSTICK, "%s call with id %d", __func__, joystick_index);
-    if (joystick_index < 0 || joystick_index >= shared_config.nb_controllers)
+    if (joystick_index < 0 || joystick_index >= Global::shared_config.nb_controllers)
+        return NULL;
+
+    /* Can't open detached game controller */
+    if (!attached[joystick_index])
         return NULL;
 
     /* Save the opening of the game controller */
@@ -100,7 +129,7 @@ static const char joy_name[] = "XInput Controller";
 /* Override */ SDL_GameController* SDL_GameControllerFromInstanceID(SDL_JoystickID joy)
 {
     debuglogstdio(LCF_SDL | LCF_JOYSTICK, "%s call with id %d", __func__, joy);
-    if (joy < 0 || joy >= shared_config.nb_controllers)
+    if (joy < 0 || joy >= Global::shared_config.nb_controllers)
         return NULL;
     if (gcids[joy] != -1)
         return NULL;
@@ -132,11 +161,27 @@ const char* xbox360Mapping = "00000000000000000000000000000000,XInput Controller
 
     int* gcid = reinterpret_cast<int*>(gamecontroller);
 
-    if (*gcid < 0 || *gcid >= shared_config.nb_controllers)
+    if (*gcid < 0 || *gcid >= Global::shared_config.nb_controllers)
         return NULL;
 
     /* Check if controller is available */
     if (gcids[*gcid] == -1)
+        return NULL;
+
+    /* Return the mapping of my own xbox 360 controller.
+     * The game is supposed to free the char*, so we must
+     * allocate it. */
+    int mapsize = strlen(xbox360Mapping);
+    char* mapping = static_cast<char*>(malloc(mapsize+1));
+    strcpy(mapping, xbox360Mapping);
+    return mapping;
+}
+
+/* Override */ char *SDL_GameControllerMappingForDeviceIndex(int joystick_index)
+{
+    debuglogstdio(LCF_SDL | LCF_JOYSTICK, "%s call with id %d", __func__, joystick_index);
+
+    if (joystick_index < 0 || joystick_index >= Global::shared_config.nb_controllers)
         return NULL;
 
     /* Return the mapping of my own xbox 360 controller.
@@ -157,7 +202,7 @@ const char* xbox360Mapping = "00000000000000000000000000000000,XInput Controller
 
     int* gcid = reinterpret_cast<int*>(gamecontroller);
 
-    if (*gcid < 0 || *gcid >= shared_config.nb_controllers)
+    if (*gcid < 0 || *gcid >= Global::shared_config.nb_controllers)
         return SDL_FALSE;
     if (gcids[*gcid] == -1)
         return SDL_FALSE;
@@ -205,6 +250,62 @@ const char* xbox360Mapping = "00000000000000000000000000000000,XInput Controller
     SDL_JoystickUpdate();
 }
 
+/* Override */ SDL_GameControllerButtonBind SDL_GameControllerGetBindForAxis(SDL_GameController *gamecontroller,
+                                 SDL_GameControllerAxis axis)
+{
+    debuglogstdio(LCF_SDL | LCF_JOYSTICK, "%s call with id %d and axis %d", __func__, gamecontroller?*reinterpret_cast<int*>(gamecontroller):-1, axis);
+
+    SDL_GameControllerButtonBind b;
+    b.bindType = SDL_CONTROLLER_BINDTYPE_NONE;
+
+    if (!gamecontroller)
+        return b;
+
+    int* gcid = reinterpret_cast<int*>(gamecontroller);
+
+    if (*gcid < 0 || *gcid >= Global::shared_config.nb_controllers)
+        return b;
+
+    /* Check if controller is available */
+    if (gcids[*gcid] == -1)
+        return b;
+
+    /* Check if axis is mapped */
+    if ((axis < 0) || (axis >= SingleInput::AXIS_LAST))
+        return b;
+    
+    /* Using my default xbox360 mapping */
+    static int bindA[] = {0, 1, 3, 4, 2, 5};
+
+    b.bindType = SDL_CONTROLLER_BINDTYPE_AXIS;
+    b.value.axis = bindA[axis];
+    
+    return b;
+}
+
+/* Override */ SDL_bool SDL_GameControllerHasAxis(SDL_GameController *gamecontroller, SDL_GameControllerAxis axis)
+{
+    debuglogstdio(LCF_SDL | LCF_JOYSTICK, "%s call with id %d and axis %d", __func__, gamecontroller?*reinterpret_cast<int*>(gamecontroller):-1, axis);
+
+    if (!gamecontroller)
+        return SDL_FALSE;
+
+    int* gcid = reinterpret_cast<int*>(gamecontroller);
+
+    if (*gcid < 0 || *gcid >= Global::shared_config.nb_controllers)
+        return SDL_FALSE;
+
+    /* Check if controller is available */
+    if (gcids[*gcid] == -1)
+        return SDL_FALSE;
+
+    /* Check if axis is mapped */
+    if ((axis < 0) || (axis >= SingleInput::AXIS_LAST))
+        return SDL_FALSE;
+
+    return SDL_TRUE;
+}
+
 /* Override */ Sint16 SDL_GameControllerGetAxis(SDL_GameController *gamecontroller,
                                           SDL_GameControllerAxis axis)
 {
@@ -215,7 +316,7 @@ const char* xbox360Mapping = "00000000000000000000000000000000,XInput Controller
 
     int* gcid = reinterpret_cast<int*>(gamecontroller);
 
-    if (*gcid < 0 || *gcid >= shared_config.nb_controllers)
+    if (*gcid < 0 || *gcid >= Global::shared_config.nb_controllers)
         return 0;
 
     /* Check if controller is available */
@@ -223,13 +324,79 @@ const char* xbox360Mapping = "00000000000000000000000000000000,XInput Controller
         return 0;
 
     /* Check if axis is valid */
-    if ((axis < 0) || (axis >= SDL_CONTROLLER_AXIS_MAX ))
+    if ((axis < 0) || (axis >= SingleInput::AXIS_LAST))
         return 0;
 
     /* Return axis value */
     return game_ai.controller_axes[*gcid][axis];
 
 }
+
+/* Override */ SDL_GameControllerButtonBind 
+SDL_GameControllerGetBindForButton(SDL_GameController *gamecontroller,
+                                   SDL_GameControllerButton button)
+{
+    debuglogstdio(LCF_SDL | LCF_JOYSTICK, "%s call with id %d and button %d", __func__, gamecontroller?*reinterpret_cast<int*>(gamecontroller):-1, button);
+
+    SDL_GameControllerButtonBind b;
+    b.bindType = SDL_CONTROLLER_BINDTYPE_NONE;
+
+    if (!gamecontroller)
+        return b;
+
+    int* gcid = reinterpret_cast<int*>(gamecontroller);
+
+    if (*gcid < 0 || *gcid >= Global::shared_config.nb_controllers)
+        return b;
+
+    /* Check if controller is available */
+    if (gcids[*gcid] == -1)
+        return b;
+
+    /* Check if button is mapped */
+    if ((button < 0) || (button >= SingleInput::BUTTON_LAST))
+        return b;
+    
+    /* Using my default xbox360 mapping */
+    static const int bindB[11] = {0, 1, 2, 3, 6, 8, 7, 9, 10, 4, 5};
+    static const int bindH[4] = {1, 4, 8, 2};
+
+    if (button < SingleInput::BUTTON_DPAD_UP) {
+        b.bindType = SDL_CONTROLLER_BINDTYPE_BUTTON;
+        b.value.button = bindB[button];
+    }
+    else {
+        b.bindType = SDL_CONTROLLER_BINDTYPE_HAT;
+        b.value.hat.hat = 0;
+        b.value.hat.hat_mask = bindH[button-SingleInput::BUTTON_DPAD_UP];
+    }
+    return b;
+}
+
+/* Override */ SDL_bool SDL_GameControllerHasButton(SDL_GameController *gamecontroller,
+                                                             SDL_GameControllerButton button)
+{
+    debuglogstdio(LCF_SDL | LCF_JOYSTICK, "%s call with id %d and button %d", __func__, gamecontroller?*reinterpret_cast<int*>(gamecontroller):-1, button);
+
+    if (!gamecontroller)
+        return SDL_FALSE;
+
+    int* gcid = reinterpret_cast<int*>(gamecontroller);
+
+    if (*gcid < 0 || *gcid >= Global::shared_config.nb_controllers)
+        return SDL_FALSE;
+
+    /* Check if controller is available */
+    if (gcids[*gcid] == -1)
+        return SDL_FALSE;
+
+    /* Check if button is mapped */
+    if ((button < 0) || (button >= SingleInput::BUTTON_LAST))
+        return SDL_FALSE;
+
+    return SDL_TRUE;
+}
+
 
 /* Override */ Uint8 SDL_GameControllerGetButton(SDL_GameController *gamecontroller,
                                                  SDL_GameControllerButton button)
@@ -241,7 +408,7 @@ const char* xbox360Mapping = "00000000000000000000000000000000,XInput Controller
 
     int* gcid = reinterpret_cast<int*>(gamecontroller);
 
-    if (*gcid < 0 || *gcid >= shared_config.nb_controllers)
+    if (*gcid < 0 || *gcid >= Global::shared_config.nb_controllers)
         return 0;
 
     /* Check if controller is available */
@@ -249,7 +416,7 @@ const char* xbox360Mapping = "00000000000000000000000000000000,XInput Controller
         return 0;
 
     /* Check if button is valid */
-    if ((button < 0) || (button >= SDL_CONTROLLER_BUTTON_MAX ))
+    if ((button < 0) || (button >= SingleInput::BUTTON_LAST))
         return 0;
 
     /* Return button value */
@@ -340,7 +507,7 @@ const char* xbox360Mapping = "00000000000000000000000000000000,XInput Controller
 
     int* gcid = reinterpret_cast<int*>(gamecontroller);
 
-    if (*gcid < 0 || *gcid >= shared_config.nb_controllers)
+    if (*gcid < 0 || *gcid >= Global::shared_config.nb_controllers)
         return;
 
     /* Decrease the ref count */

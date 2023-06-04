@@ -27,7 +27,11 @@
 #include <set>
 
 #include "InputEditorModel.h"
+#include "../Context.h"
+#include "../movie/MovieFile.h"
 #include "../SaveStateList.h"
+#include "../SaveState.h"
+#include "qtutils.h"
 
 InputEditorModel::InputEditorModel(Context* c, MovieFile* m, QObject *parent) : QAbstractTableModel(parent), context(c), movie(m) {}
 
@@ -145,6 +149,7 @@ QVariant InputEditorModel::data(const QModelIndex &index, int role) const
     if (role == Qt::BackgroundRole) {
         /* Main color */
         QColor color = QGuiApplication::palette().window().color();
+        bool lightTheme = isLightTheme();
         int r, g, b;
         color.getRgb(&r, &g, &b, nullptr);
         
@@ -152,7 +157,7 @@ QVariant InputEditorModel::data(const QModelIndex &index, int role) const
         uint64_t root_frame = SaveStateList::rootStateFramecount();
         bool greenzone = (row < context->framecount) && root_frame && (row >= root_frame);
 
-        if (color.lightness() > 128) {
+        if (lightTheme) {
             /* Light theme */
             if (row == context->framecount)
                 color.setRgb(r - 0x30, g - 0x10, b);
@@ -514,7 +519,7 @@ bool InputEditorModel::insertRows(int row, int count, bool duplicate, const QMod
     endInsertRows();
 
     /* Update the movie framecount. Should it be done here ?? */
-    movie->inputs->updateLength();
+    movie->updateLength();
 
     return true;
 }
@@ -534,7 +539,7 @@ bool InputEditorModel::removeRows(int row, int count, const QModelIndex &parent)
     endRemoveRows();
 
     /* Update the movie framecount */
-    movie->inputs->updateLength();
+    movie->updateLength();
 
     return true;
 }
@@ -597,7 +602,7 @@ int InputEditorModel::pasteInputs(int row)
     }
 
     /* Update the movie framecount */
-    movie->inputs->updateLength();
+    movie->updateLength();
 
     /* Update the paste inputs view */
     emit dataChanged(index(row,0), index(row+paste_ais.size()-1,columnCount()));
@@ -634,7 +639,7 @@ void InputEditorModel::pasteInputsInRange(int row, int count)
     }
 
     /* Update the movie framecount */
-    movie->inputs->updateLength();
+    movie->updateLength();
 
     /* Update the paste inputs view */
     emit dataChanged(index(row,0), index(row+count-1,columnCount()));
@@ -671,7 +676,7 @@ int InputEditorModel::pasteInsertInputs(int row)
     endInsertRows();
 
     /* Update the movie framecount */
-    movie->inputs->updateLength();
+    movie->updateLength();
 
     emit inputSetChanged();
 

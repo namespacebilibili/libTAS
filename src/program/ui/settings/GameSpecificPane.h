@@ -17,36 +17,41 @@
     along with libTAS.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef LIBTAS_OSDWINDOW_H_INCLUDED
-#define LIBTAS_OSDWINDOW_H_INCLUDED
+#ifndef LIBTAS_GAMESPECIFICPANE_H_INCLUDED
+#define LIBTAS_GAMESPECIFICPANE_H_INCLUDED
 
-#include <QtWidgets/QDialog>
-#include <QtWidgets/QComboBox>
+#include <QtWidgets/QWidget>
 
-#include "../Context.h"
+class Context;
+class ToolTipCheckBox;
+class QGroupBox;
 
-class OsdWindow : public QDialog {
+class GameSpecificPane : public QWidget {
     Q_OBJECT
 public:
-    OsdWindow(Context *c, QWidget *parent = Q_NULLPTR);
+    GameSpecificPane(Context *c);
 
-    /* Update UI elements when the config has changed */
-    void update_config();
+    void update(int status);
 
     Context *context;
 
 private:
-    QComboBox *frameHorChoice;
-    QComboBox *frameVertChoice;
-    QComboBox *inputsHorChoice;
-    QComboBox *inputsVertChoice;
-    QComboBox *messagesHorChoice;
-    QComboBox *messagesVertChoice;
-    QComboBox *watchesHorChoice;
-    QComboBox *watchesVertChoice;
+    void initLayout();
+    void initSignals();
+    void initToolTips();
 
-private slots:
-    void slotOk();
+    void showEvent(QShowEvent *event) override;
+    
+    QGroupBox *timingGroupBox;
+    QGroupBox *syncGroupBox;
+    
+    ToolTipCheckBox *timingCeleste;
+    ToolTipCheckBox *syncCeleste;
+    ToolTipCheckBox *syncWitness;
+
+public slots:
+    void loadConfig();
+    void saveConfig();
 };
 
 #endif

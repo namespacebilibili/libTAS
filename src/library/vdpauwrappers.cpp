@@ -21,9 +21,10 @@
 
 #include "logging.h"
 #include "GlobalState.h"
-#include "../shared/SharedConfig.h"
+// #include "../shared/SharedConfig.h"
 #include "ScreenCapture.h"
 #include "frame.h"
+#include "global.h"
 #include "renderhud/RenderHUD_VDPAU.h"
 #include "DeterministicTimer.h"
 #include "backtrace.h"
@@ -103,12 +104,10 @@ VdpStatus VdpPresentationQueueCreate(VdpDevice device, VdpPresentationQueueTarge
 
     vdp::vdpDevice = device;
 
-    game_info.video |= GameInfo::VDPAU;
-    game_info.tosend = true;
+    Global::game_info.video |= GameInfo::VDPAU;
+    Global::game_info.tosend = true;
 
-#ifdef LIBTAS_ENABLE_HUD
     RenderHUD_VDPAU::setDevice(device);
-#endif
 
     return orig::VdpPresentationQueueCreate(device, presentation_queue_target, presentation_queue);
 }
@@ -149,13 +148,9 @@ VdpStatus VdpPresentationQueueDisplay(VdpPresentationQueue presentation_queue, V
     ScreenCapture::resize(uw, uh);
 
     /* Start the frame boundary and pass the function to draw */
-#ifdef LIBTAS_ENABLE_HUD
     static RenderHUD_VDPAU renderHUD;
     renderHUD.setSurface(surface);
     frameBoundary([&] () {orig::VdpPresentationQueueDisplay(presentation_queue, surface, clip_width, clip_height, earliest_presentation_time);}, renderHUD);
-#else
-    frameBoundary([&] () {orig::VdpPresentationQueueDisplay(presentation_queue, surface, clip_width, clip_height, earliest_presentation_time);});
-#endif
 
     return VDP_STATUS_OK;
 }

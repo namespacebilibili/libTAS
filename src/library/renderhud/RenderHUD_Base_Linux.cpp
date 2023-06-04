@@ -18,15 +18,15 @@
  */
 
 #include "RenderHUD_Base_Linux.h"
-#ifdef LIBTAS_ENABLE_HUD
 
 #include "../logging.h"
 #include "../hook.h"
-#include "../global.h" // shared_config
+#include "../global.h" // Global::shared_config
 #include <fontconfig/fontconfig.h>
 #include "SurfaceARGB.h"
 // #include <X11/keysym.h>
 #include "../ScreenCapture.h"
+#include "../GlobalState.h"
 
 namespace libtas {
 
@@ -115,7 +115,7 @@ void RenderHUD_Base_Linux::initFonts()
         }
         else {
             debuglogstdio(LCF_WINDOW | LCF_ERROR, "We didn't find any regular TTF font !");
-            shared_config.osd = 0;
+            Global::shared_config.osd = 0;
         }
 
         if (fs) FcFontSetDestroy(fs);
@@ -152,5 +152,3 @@ void RenderHUD_Base_Linux::renderText(const char* text, Color fg_color, Color bg
 }
 
 }
-
-#endif

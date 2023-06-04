@@ -1,7 +1,36 @@
 ## [Unreleased]
 ### Added
+
+* Add a "Save as default" button for the Encode window (#507)
+* Revamp settings
+* Draw a crosshair on current pointer coordinates (#510)
+* Add a timeout for waiting on Unity threads (#515)
+* Add new SDL audio functions and update SDL_dynapi (#518)
+* RAM search can be interrupted
+* Hook mono sleep function
+* Implement XIQueryDevice()
+* Implement SDL_JoystickGetDeviceInstanceID()
+* Add a window for lua output
+* Manage lua scripts and change the callback system
+* Add a performance timer for monitoring
+* Implement FocusIn/FocusOut inputs (#367)
+
 ### Changed
+
+* Remove code needing c++17, and add the c++11 compile flag (#516)
+* Don't skip frames in Vulkan for now (#492)
+* Immediately detach all created threads, and handle joinable state manually
+* Settings has its own menu and opens the corresponding tab (#521)
+* Merge controller added/removed into single flag
+
 ### Fixed
+
+* Fix OSD SDL2 renderer memory leak
+* Fix SDL_GameController functions as they raised the maximum number of buttons
+* Get game window size from SDL2 when possible (#513)
+* Set pixel buffer and pack row before reading pixels (#505)
+* Suspend sigaction for our checkpoint signals
+* Handle unusual and long memory section filenames
 
 ## [1.4.4] - 2022-10-25
 ### Added
@@ -19,6 +48,7 @@
 * Add an option to keep rendering during fastforward (491)
 * Alert when an input column cannot be removed
 * Add more SDL joystick function hooks for recent FNA builds
+* Add a setting to skip all sleep calls
 
 ### Changed
 ### Fixed

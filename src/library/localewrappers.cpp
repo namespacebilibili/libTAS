@@ -20,6 +20,8 @@
 #include "localewrappers.h"
 #include "logging.h"
 #include "hook.h"
+#include "global.h"
+#include "GlobalState.h"
 
 #include <cstring>
 
@@ -30,7 +32,7 @@ DEFINE_ORIG_POINTER(getenv)
 
 static const char* config_locale()
 {
-    switch (shared_config.locale) {
+    switch (Global::shared_config.locale) {
     case SharedConfig::LOCALE_ENGLISH:
         return "en_US.UTF-8";
     case SharedConfig::LOCALE_JAPANESE:

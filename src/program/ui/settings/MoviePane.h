@@ -17,35 +17,43 @@
     along with libTAS.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef LIBTAS_AUTOSAVEWINDOW_H_INCLUDED
-#define LIBTAS_AUTOSAVEWINDOW_H_INCLUDED
+#ifndef LIBTAS_MOVIEPANE_H_INCLUDED
+#define LIBTAS_MOVIEPANE_H_INCLUDED
 
-#include <QtWidgets/QDialog>
-#include <QtWidgets/QGroupBox>
-#include <QtWidgets/QDoubleSpinBox>
-#include <QtWidgets/QSpinBox>
+#include <QtWidgets/QWidget>
 
-#include "../Context.h"
+class Context;
+class QGroupBox;
+class ToolTipComboBox;
+class QSpinBox;
+class QDoubleSpinBox;
 
-class AutoSaveWindow : public QDialog {
+class MoviePane : public QWidget {
     Q_OBJECT
-
 public:
-    AutoSaveWindow(Context *c, QWidget *parent = Q_NULLPTR);
+    MoviePane(Context *c);
 
-    /* Update UI elements when the config has changed */
-    void update_config();
+    void update(int status);
 
-private:
     Context *context;
 
+private:
+    void initLayout();
+    void initSignals();
+    void initToolTips();
+
+    void showEvent(QShowEvent *event) override;
+    
     QGroupBox *autosaveBox;
     QDoubleSpinBox *autosaveDelay;
     QSpinBox *autosaveFrames;
     QSpinBox *autosaveCount;
 
-private slots:
-    void slotOk();
+    ToolTipComboBox* endChoice;
+
+public slots:
+    void loadConfig();
+    void saveConfig();
 };
 
 #endif

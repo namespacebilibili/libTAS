@@ -20,11 +20,13 @@
 #include "eglwrappers.h"
 #include "openglwrappers.h"
 #include "hook.h"
+#include "global.h"
 #include "logging.h"
 #include "renderhud/RenderHUD_GL.h"
 #include "ScreenCapture.h"
 #include "frame.h"
 #include "xlib/xwindows.h" // x11::gameXWindows
+#include "GlobalState.h"
 
 #include <string.h>
 
@@ -319,11 +321,11 @@ EGLBoolean eglMakeCurrent( EGLDisplay dpy, EGLSurface draw, EGLSurface read, EGL
 
     if (draw && (!x11::gameXWindows.empty())) {
 
-        game_info.video |= GameInfo::EGL | GameInfo::OPENGL;
-        game_info.tosend = true;
+        Global::game_info.video |= GameInfo::EGL | GameInfo::OPENGL;
+        Global::game_info.tosend = true;
 
         /* If we are using SDL, we let the higher function initialize stuff */
-        if (!(game_info.video & (GameInfo::SDL1 | GameInfo::SDL2 | GameInfo::SDL2_RENDERER))) {
+        if (!(Global::game_info.video & (GameInfo::SDL1 | GameInfo::SDL2 | GameInfo::SDL2_RENDERER))) {
             /* Now that the context is created, we can init the screen capture */
             ScreenCapture::init();
         }
@@ -354,14 +356,9 @@ EGLBoolean eglSwapBuffers( EGLDisplay dpy, EGLSurface surface )
     DEBUGLOGCALL(LCF_WINDOW | LCF_OGL);
 
     /* Start the frame boundary and pass the function to draw */
-#ifdef LIBTAS_ENABLE_HUD
-    // static RenderHUD_GL renderHUD;
     static RenderHUD_GL renderHUD;
     renderHUD.setGLES(bindAPI == EGL_OPENGL_ES_API);
     frameBoundary([&] () {orig::eglSwapBuffers(dpy, surface);}, renderHUD);
-#else
-    frameBoundary([&] () {orig::eglSwapBuffers(dpy, surface);});
-#endif
 
     return EGL_TRUE;
 }
@@ -376,7 +373,7 @@ EGLBoolean eglSwapInterval (EGLDisplay dpy, EGLint interval)
     swapInterval = interval;
 
     /* When using non deterministic timer, we let the game set vsync */
-    if (shared_config.debug_state & SharedConfig::DEBUG_UNCONTROLLED_TIME) {
+    if (Global::shared_config.debug_state & SharedConfig::DEBUG_UNCONTROLLED_TIME) {
         return orig::eglSwapInterval(dpy, interval);
     }
     return orig::eglSwapInterval(dpy, interval);

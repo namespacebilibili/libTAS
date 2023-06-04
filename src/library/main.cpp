@@ -23,6 +23,7 @@
 #include "dlhook.h"
 #include "../shared/sockethelpers.h"
 #include "logging.h"
+#include "global.h"
 #include "NonDeterministicTimer.h"
 #include "DeterministicTimer.h"
 #include "../shared/messages.h"
@@ -39,7 +40,8 @@
 #include "steam/isteamuser.h" // SteamSetUserDataFolder
 #include "steam/isteamremotestorage/isteamremotestorage.h" // SteamSetRemoteStorageFolder
 #include "Stack.h"
-
+#include "monowrappers.h"
+#include "GlobalState.h"
 
 extern char**environ;
 
@@ -130,7 +132,7 @@ void __attribute__((constructor)) init(void)
                 break;
             case MSGN_CONFIG:
                 debuglogstdio(LCF_SOCKET, "Receiving config");
-                receiveData(&shared_config, sizeof(SharedConfig));
+                receiveData(&Global::shared_config, sizeof(SharedConfig));
                 break;
             case MSGN_DUMP_FILE:
                 debuglogstdio(LCF_SOCKET, "Receiving dump filename");
@@ -170,7 +172,7 @@ void __attribute__((constructor)) init(void)
         message = receiveMessage();
     }
 
-    if (shared_config.sigint_upon_launch) {
+    if (Global::shared_config.sigint_upon_launch) {
         raise(SIGINT);
     }
 
@@ -190,13 +192,15 @@ void __attribute__((constructor)) init(void)
     /* Initialize sound parameters */
     audiocontext.init();
 
-    is_inited = true;
+    hook_mono();
+
+    Global::is_inited = true;
 }
 
 void __attribute__((destructor)) term(void)
 {
-    if (is_inited) {
-        if (!is_fork) {
+    if (Global::is_inited) {
+        if (!Global::is_fork) {
             sendMessage(MSGB_QUIT);
             closeSocket();
         }
